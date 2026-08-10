@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **v1.0 APPROVED（オーナー承認済方針に基づき固定）** |
+| Status | **v1.1 APPROVED（v1.0はオーナー承認済方針に基づき固定。v1.1差分は統合レビュー裁定による追加であり、オーナー事後確認事項）** |
 | 適用範囲 | Crossimage Product OS に関わる全エージェント（A1〜A7, B1〜B6, C1〜C4, 運用AI Engine）および全設計・実装成果物 |
 | 変更手続 | 本書の変更は秘書AIがChange Logに追記し、オーナー承認後に発効。**各エージェントによる勝手な用語・Status・ID の新設は禁止**（必要時は「Governance変更提案」として成果物末尾に記載し、統合レビューで採否判定） |
 
@@ -59,6 +59,10 @@
 | ProjectDNA | 案件DNA | 项目DNA | §4 |
 | Gate | ゲート | 关卡 | SOFT/HARD |
 | WeChatDigest | WeChat要約 | 微信摘要 | §11 ハイブリッド運用 |
+| FactoryAudit | 工場監査 | 工厂审核 | v1.1追加（A5提案） |
+| IPQC | 工程内検査 | 制程检验（IPQC） | v1.1追加（A5提案） |
+| Rework | 手直し | 返工 | v1.1追加（A5提案） |
+| LoadingSupervision | 積込立会 | 装柜监督 | v1.1追加（A5提案） |
 
 ## 2. ID体系
 
@@ -72,6 +76,7 @@
 | 業務Taskテンプレート（日本側） | `JP-{領域}-{NNN}`（10刻み） | `JP-PROP-020` |
 | 業務Taskテンプレート（中国側） | `CN-{領域}-{NNN}`（10刻み） | `CN-RFQ-010` |
 | Task実体（案件生成後） | `{ProjectID}-TSK-{NNNN}` | `CI-2026-0001-TSK-0031` |
+| Factory付帯記録（案件非依存） | `FA-{NNNN}-{TYPE}-{NN}`（TYPE: AUD監査 / DOC資質書類 / CAPA） | `FA-0007-AUD-01`（v1.1追加、A5提案） |
 | Gate | `G-{NN}` | `G-01` |
 | 領域コード | LEAD/PROP(提案)/REQ(要件)/SPEC/RFQ/FACT(工場)/SMP/QUAL/REG(法規)/PROD/INSP/LOGI/FIN/CMP/RPT(Repeat) | |
 
@@ -97,6 +102,7 @@
 | Complaint根本原因 | `FACTORY / TRADING_COMPANY / CLIENT / LOGISTICS / END_USER / UNKNOWN`（UNKNOWN≠商社責任） |
 | 顧客心理(内部) | `IDEA / EXCITED / CONVINCED / COMMITTED / ORDERED` |
 | Automation分類 | `A_FULL_AUTO / B_AI_DRAFT / C_HUMAN_DECISION / D_MANUAL_EXCEPTION` |
+| QuestionClass（顧客質問分類） | `BLOCKER / IMPORTANT_LATER / OPTIONAL`（v1.1追加、A2提案） |
 
 ## 4. Project DNA（8軸・正準コード）
 
@@ -168,7 +174,7 @@ Gate定義フォーマット: `gate_id / name / type / checkpoint / condition / 
 |---|---|---|---|---|
 | G-01 | 正式発注なし | HARD | MassProduction開始 | 不可 |
 | G-02 | GoldenSample未LOCKED | HARD | 正式量産開始 | 不可 |
-| G-03 | Regulatory=BLOCKED | HARD | Production/Shipment（該当工程） | 不可（REG承認でStatus変更のみ） |
+| G-03 | Regulatory=BLOCKED | HARD | Production/Shipment（該当工程） | 不可（REG承認でStatus変更のみ）。※v1.1明文化: `PRODUCTION_READY` / `SHIPMENT_READY` は Regulatory が `APPROVED` または `NOT_APPLICABLE` であることが必須条件（A6提案） |
 | G-04 | Critical Issue未解決 | HARD | ShipmentRelease | 不可 |
 | G-05 | 検品未完了/FAIL未処理 | HARD | ShipmentRelease | 不可 |
 | G-06 | UnauthorizedChange検知 | HARD | ShipmentRelease（ECR承認まで） | 不可 |
@@ -176,6 +182,8 @@ Gate定義フォーマット: `gate_id / name / type / checkpoint / condition / 
 | G-11 | Pantone未確定 | SOFT | 概算RFQ | WARN付き進行可 |
 | G-12 | 数量未確定 | SOFT | Proposal/概算見積 | 概算値で進行可 |
 | G-13 | ProjectDNA未確定 | SOFT | RFQ発行 | AI推定値で進行可（発注前に確定必須→G-01系） |
+| G-14 | Regulatory=NOT_CHECKED | SOFT | RFQ発行・Quotation送信 | WARN付き進行可（v1.1追加。A1・A6の同番重複提案を一本化） |
+| G-15 | 工場Quote未登録 | SOFT | Quotation承認 | WARN付き進行可＝概算見積であることを明示（v1.1追加、A1提案） |
 
 - HARDは**システム・人間ともに承認記録なしで突破不可**。DB制約+アプリ層の二重防御（実装フェーズ要件）。
 - Gateの追加・変更は本書への追記が必須。各エージェントは自成果物で `G-xx` を参照し、新Gateが必要なら「Governance変更提案」として起案する。
@@ -217,3 +225,4 @@ Gate定義フォーマット: `gate_id / name / type / checkpoint / condition / 
 | 版 | 日付 | 変更 |
 |---|---|---|
 | v1.0 | 2026-08-10 | 初版制定（オーナー承認方針: ハイブリッド運用・タンブラーPoC・Vertical Slice・A7承認まで実装禁止 を反映） |
+| v1.1 | 2026-08-10 | 統合レビュー裁定によるGovernance変更提案8件の採否反映。採用6件: QuestionClass enum（A2①）、G-03 Readiness条件明文化（A6②）、G-14新設（A1①+A6①を一本化）、G-15新設（A1②）、Glossary 4語追加（A5①）、Factory付帯記録ID（A5②）。不採用2件: 教育文言ライフサイクルStatus（A2②→既存Approval enum流用）、A6のG-14単独案（A1案と統合）。詳細裁定は 14-integration-review.md |
