@@ -2,16 +2,17 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **v1.1 APPROVED（v1.0はオーナー承認済方針に基づき固定。v1.1差分は統合レビュー裁定による追加であり、オーナー事後確認事項）** |
+| Status | **v2.0 APPROVED（v2.0差分はオーナー指示「Category-Agnostic Core」「言語設計ルール」を最上位制約として反映）** |
 | 適用範囲 | Crossimage Product OS に関わる全エージェント（A1〜A7, B1〜B6, C1〜C4, 運用AI Engine）および全設計・実装成果物 |
 | 変更手続 | 本書の変更は秘書AIがChange Logに追記し、オーナー承認後に発効。**各エージェントによる勝手な用語・Status・ID の新設は禁止**（必要時は「Governance変更提案」として成果物末尾に記載し、統合レビューで採否判定） |
 
 ## 0. 前提（オーナー決定事項）
 
 1. **中国工場は Portal 強制ではなく、Web / Excel / WeChat要約 のハイブリッド運用**を前提とする。Excel と WeChat 要約は第一級の入出力チャネルであり、Portal は商社側の構造化ビューと位置付ける。
-2. **Phase 0 の PoC商品は「タンブラー」を第一候補**とする。
-3. **最初の Vertical Slice**: `0知識顧客 → Proposal → Requirement → RFQ → 中国語工場仕様書出力` までを通しで検証する。全エージェントは自分の成果物の中でこのSliceに該当する部分を最も詳細に書く。
+2. **本システムは特定商品向けではない（Category-Agnostic）**。タンブラー・電動デスク・家電等の具体例は**検証用テストケースであり、優先カテゴリー・システム仕様ではない**。設計・実装においてカテゴリー固有ロジックのハードコードを禁止する（§13）。成果物中の具体例には「例でありシステム仕様ではない」ことが分かる注記を付ける。
+3. **最初の Vertical Slice**: `0知識顧客 → Proposal → Requirement → RFQ → 中国語工場仕様書出力` を、テストケース第1号（タンブラー）で通しで検証する。これはUniversal Core+Rule Pack機構の検証であり、タンブラー専用設計の根拠にしてはならない。
 4. **A7 Red Team 承認までコード実装は禁止**。
+5. **最上位目的**: 商品開発知識ゼロの顧客からプロまで受け入れ、どんな商品でも要求を構造化し、最適な製造能力・品質・価格・リスク管理を設計し、少人数で大量案件を安全かつ高収益に回し、リピートまで自動化すること。評価指標は機能数ではなく、顧客（簡単・作りたくなる・安心・また頼みたい）/ 商社（作業が少ない・利益と責任が見える）/ 中国側（指示が明確・往復が少ない）/ 結果（低クレーム・高品質・高粗利・高リピート）。
 
 ---
 
@@ -200,6 +201,8 @@ Gate定義フォーマット: `gate_id / name / type / checkpoint / condition / 
 | `15-a3-data-design.md` | A3 | ERD・テーブル定義・State Machine・Audit |
 | `16-a4-quality-design.md` | A4 | Quality Tier詳細・外観基準・Inspection Plan・Quality Reco Engine |
 | `17-a7-red-team.md` | A7 | Red Teamレビュー・トラブルケース・承認判定 |
+| `18-category-rule-packs.md` | A8 | Category Rule Pack設計・属性ルールエンジン・20カテゴリー比較表（v2.0追加） |
+| `19-language-ux.md` | A9 | 言語設計・用語辞書（Glossary）・Tooltip仕様・レベル別説明・初心者モードUI（v2.0追加） |
 
 ## 11. ハイブリッド・チャネル運用原則（Web / Excel / WeChat要約）
 
@@ -208,7 +211,68 @@ Gate定義フォーマット: `gate_id / name / type / checkpoint / condition / 
 3. **WeChat要約（WeChatDigest）**: 案件ごとの要点（未回答質問・期限・変更点）をAIが中国語で要約生成し、事務所経由で送信。逆方向（WeChat→システム）の要約取込も同フォーマット。
 4. **禁止事項**: WeChat/メール上の合意のみで仕様・価格・納期を確定すること。必ずシステム登録（Approval記録）を経る。
 
-## 12. Phase 0 Definition of Done
+## 13. Category-Agnostic 2層アーキテクチャ（v2.0・最上位制約）
+
+システムは以下の2層に分離する。**Layer 1 にカテゴリー固有ロジックを書くことを禁止**し、カテゴリー差は全て Layer 2 のデータ（設定・Rule・Template）として表現する。
+
+### Layer 1: Universal Core（カテゴリー非依存）
+Project / Requirement / Specification / RFQ / Quote / Sample / Approval / Quality / Production / Inspection / Logistics / Complaint / RepeatOrder — 全エンティティ・State Machine・Gate・Workflow機構はカテゴリーを知らない。
+
+### Layer 2: Category Rule Pack（データとして定義）
+各カテゴリーは以下の構成要素を持つ**データパッケージ**であり、新カテゴリー追加は**コード修正なし（設定・テンプレート追加のみ）**で行えること:
+`Required Questions（必須質問）/ CTQ（重要品質特性）/ Risk / Regulatory Candidates（適用法規候補）/ Test Plan / Quality Standard / Factory Qualification（工場適格要件）/ Inspection Template（検品テンプレート）/ Packaging Requirement`
+
+### Rule生成式（最終形）
+```
+適用Ruleセット = f( Category + Product Attributes + Risk Attributes + Brand/Quality Tier )
+```
+カテゴリー単独でルールを決めない。属性の組合せ（例: ウォーターサーバー = 電気×食品接触×水漏れ×高温×大型物流）で必要ルールを合成する。
+
+### 属性タグ正準レジストリ（ATTR_*）
+| コード | 意味 |
+|---|---|
+| ATTR_ELECTRIC | 電気を使う |
+| ATTR_FOOD_CONTACT | 食品・飲料に触れる |
+| ATTR_CHILD_USE | 子供が使う |
+| ATTR_LOAD_BEARING | 荷重がかかる（身体を支える・重量物を載せる） |
+| ATTR_WATER | 水を使う・水漏れリスク |
+| ATTR_HIGH_TEMP | 高温になる・加熱する |
+| ATTR_LIQUID_SEAL | 液体の密閉が必要 |
+| ATTR_BATTERY | バッテリーを内蔵する |
+| ATTR_WIRELESS | Bluetooth / Wi-Fi 等の無線通信機能 |
+| ATTR_SKIN_CONTACT | 人体に長時間触れる |
+| ATTR_BULKY | 大型・重量物（物流特殊要件） |
+| ATTR_OUTDOOR | 屋外・耐候使用 |
+| ATTR_SHARP_EDGE | 鋭利部・可動部の挟み込みリスク |
+
+属性の追加は本書の変更手続による。属性は Requirement 解析時にAIが推定（AI_SUGGESTED）し、人間確定で CONFIRMED。
+
+### 未知カテゴリー対応
+Category Rule Pack が存在しない商品が入力された場合: AIが属性タグを推定 → 属性ベースでルールを組み立て → `REVIEW_REQUIRED` として人間（PM/QA/REG）が確認・補正 → 実績が貯まったら新Rule Packとして正式登録する。**「未対応カテゴリーのため受付不可」という挙動は禁止**。
+
+## 14. 言語設計ルール（v2.0・最上位制約）
+
+本システムは日本語ユーザー中心・初心者利用前提の「知らない人でも使える専門システム」である。**理解を内蔵したプロダクトOS**として以下を全成果物・全UI・全文書に適用する。
+
+### 禁止
+- 英語のみでの専門用語提示（意味説明なしの英語単独出現）
+- UI・顧客向け文書・エラーメッセージが英語前提になること
+
+### 必須フォーマット
+専門用語は初出時に必ず: **`用語（日本語説明：短い定義）`**
+例: `MOQ（最小発注数量：工場が受けられる最低ロット）` / `CTQ（重要品質特性：品質判断の重要基準）` / `RFQ（見積依頼：工場に価格を依頼するプロセス）`
+必要に応じて具体例・影響・関連用語を添える（例: `MOQ 1000個 → 小ロット不可、量産前提`）。
+
+### インタラクティブUI前提
+- 全専門用語に Tooltip（ホバー/タップで説明表示、詳細表示で定義・例・関連項目）
+- **レベル別説明**: ExperienceLevel 連動 — `EXP_BEGINNER`=完全説明付き / `EXP_INTERMEDIATE`=簡易説明 / `EXP_PROFESSIONAL`=用語のみ（Tooltipは常に利用可）
+- 用語を隠さない。ただし必ずその場で理解可能にする（学習ではなく"その場理解"）
+
+### 適用範囲
+UI上の全専門用語 / 顧客向け説明文 / Workflow説明 / Dashboard表示 / エラーメッセージ / 工場向け指示文（中国語も同原則: 中文用語+説明）。
+§1 の正準キー（EN）は DB・API・内部識別子専用であり、**表示層に生のまま出してはならない**。表示用の用語辞書（Glossary）は 19番文書で管理する。
+
+## 15. Phase 0 Definition of Done
 
 以下を全て満たした時点で Phase 0 完了とする。
 
@@ -219,6 +283,8 @@ Gate定義フォーマット: `gate_id / name / type / checkpoint / condition / 
 5. **タンブラーVertical Sliceの机上検証**が完了している: 0知識顧客の入力例 → Proposal(OPTION A/B/C 実例) → Requirement/SpecField一覧 → RFQ実例 → **中国語工場仕様書の実出力例（テンプレートに実データを流し込んだもの）** が成果物内に存在し、用語・ID・Statusが本書に完全準拠している
 6. Automation Matrix上で A+B ≥ 80%（Phase 0時点は分類ベースで可）
 7. 本書への未裁定の「Governance変更提案」が残っていない
+8. **Category-Agnostic遵守（v2.0追加)**: 全設計にカテゴリー固有ロジックのハードコードが存在しないこと。`18-category-rule-packs.md` に最低20カテゴリー×10軸の比較表と属性ベースRule組立設計が存在すること。具体例には「例でありシステム仕様ではない」注記があること
+9. **言語ルール準拠（v2.0追加)**: 顧客向け文言・Dashboard・エラーメッセージの設計に英語専門用語の単独出現（日本語補足なし）がゼロであること。`19-language-ux.md` に用語辞書とTooltip仕様が存在すること
 
 ## Change Log
 
@@ -226,3 +292,4 @@ Gate定義フォーマット: `gate_id / name / type / checkpoint / condition / 
 |---|---|---|
 | v1.0 | 2026-08-10 | 初版制定（オーナー承認方針: ハイブリッド運用・タンブラーPoC・Vertical Slice・A7承認まで実装禁止 を反映） |
 | v1.1 | 2026-08-10 | 統合レビュー裁定によるGovernance変更提案8件の採否反映。採用6件: QuestionClass enum（A2①）、G-03 Readiness条件明文化（A6②）、G-14新設（A1①+A6①を一本化）、G-15新設（A1②）、Glossary 4語追加（A5①）、Factory付帯記録ID（A5②）。不採用2件: 教育文言ライフサイクルStatus（A2②→既存Approval enum流用）、A6のG-14単独案（A1案と統合）。詳細裁定は 14-integration-review.md |
+| v2.0 | 2026-08-10 | オーナー指示による最上位制約の追加: §13 Category-Agnostic 2層アーキテクチャ（Universal Core / Category Rule Pack、属性タグレジストリ、未知カテゴリー対応、タンブラー等をテストケースへ降格）、§14 言語設計ルール（日本語補足必須フォーマット、Tooltip/レベル別説明UI前提）、§0に最上位目的を明文化、DoDに8・9項を追加、A8/A9成果物（18・19番）を割当。旧§12はDoD→§15へ改番 |
