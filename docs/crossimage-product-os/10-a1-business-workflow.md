@@ -2,11 +2,11 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **Draft** |
-| 版 | v0.1 |
+| Status | **Reviewed** |
+| 版 | v0.2 |
 | 日付 | 2026-08-10 |
 | 作成 | A1 業務設計エージェント（Business Process Architect） |
-| 準拠 | 05-governance-pack.md v1.0（用語・ID・Status・Task定義15項目・Gate・DNAに完全準拠） |
+| 準拠 | 05-governance-pack.md v1.1（用語・ID・Status・Task定義15項目・Gate・DNAに完全準拠。G-14/G-15はv1.1裁定を反映済み） |
 | 依存 | 01-architecture-overview.md / 並行成果物: 11(A2), 12(A5), 13(A6)。related_tables のテーブル名は A3(15番)確定後に統合レビューで整合させる |
 
 ## 0. 設計原則（本書全体に適用）
@@ -342,7 +342,7 @@ purpose: タンブラー（食品接触）の適用法規候補を早期に洗�
 owner_role: REG
 trigger: JP-SPEC-010完了（材質・用途Fieldが起票された時点。UNKNOWNでもカテゴリベースで起動）
 inputs: [SpecField(材質・用途・対象年齢・販売チャネル), ProjectDNA]
-system_action: Regulatory Engine実行、Regulatory Status=NOT_CHECKED→CHECKINGへ遷移、結果をRegulatoryレコード登録
+system_action: Regulatory Engine実行（案件作成時の自動一次判定で既にCHECKINGへ遷移済みの場合は再照合。A6 §1.5準拠）、結果をRegulatoryレコード登録
 ai_action: 適用法規候補リスト生成（食品衛生法・食品接触材質、家庭用品品質表示法 等）+必要書類・試験候補+専門家確認要否（法令の最終判断はしない）
 human_action: 候補リストの一次確認、REVIEW_REQUIRED項目の特定（最終判断はJP-REG-040）
 outputs: [Regulatory(CHECKING→REVIEW_REQUIRED or APPROVED候補), 必要試験候補リスト]
@@ -458,7 +458,7 @@ notification: 発行完了→PM/CN_OFFICEへ、工場既読なし24時間→CN_O
 related_docs: [RFQ Excel(中国語), WeChatDigest]
 related_tables: [rfqs, documents, notifications]
 automation_class: A_FULL_AUTO
-gates: [G-13]
+gates: [G-13, G-14]
 ```
 
 ```yaml
@@ -525,8 +525,8 @@ Slice内訳: 20 Task = A:9 / B:6 / C:5 / D:0（A+B=75%。Cの5件は全て承認
 | JP-LEAD-040 | 商談・ヒアリング実施（非定型） | SALES | 顧客が対話希望 or AI判定で人的対応推奨 | C_HUMAN_DECISION | [] |
 | JP-LEAD-050 | 休眠Leadフォローアップ | SYSTEM | 最終接点から14日無応答 | A_FULL_AUTO | [] |
 | JP-PROP-050 | Proposal反応分析・顧客心理Status更新 | AI | Proposal閲覧ログ/返信受信 | A_FULL_AUTO | [] |
-| JP-PROP-060 | 顧客見積(Quotation)ドラフト生成・承認 | SALES | Quote比較完了 or 概算依頼受信 | B_AI_DRAFT | [G-12] |
-| JP-PROP-070 | Quotation送信・追跡 | SYSTEM | Quotation承認完了 | A_FULL_AUTO | [] |
+| JP-PROP-060 | 顧客見積(Quotation)ドラフト生成・承認 | SALES | Quote比較完了 or 概算依頼受信 | B_AI_DRAFT | [G-12, G-15] |
+| JP-PROP-070 | Quotation送信・追跡 | SYSTEM | Quotation承認完了 | A_FULL_AUTO | [G-14] |
 | JP-PROP-080 | 価格交渉・条件調整 | SALES | 顧客/工場から価格協議要求 | C_HUMAN_DECISION | [] |
 | JP-REQ-050 | 要件変更受付・差分解析 | PM | 顧客から仕様変更要望受信 | B_AI_DRAFT | [] |
 | JP-SPEC-020 | SpecField補完質問生成・送信 | PM | UNKNOWN/PROVISIONAL Fieldが工程期限に接近 | B_AI_DRAFT | [G-11] |
@@ -679,7 +679,7 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 
 ## 7. Gate参照の整合
 
-本書の各Taskの `gates` はGovernance Pack §9 の既存レジストリ（G-01〜G-06, G-10〜G-13）のみを参照している。参照マップ:
+本書の各Taskの `gates` はGovernance Pack §9 のv1.1レジストリ（G-01〜G-06, G-10〜G-15）のみを参照している。G-14/G-15は統合レビュー（14番）採用裁定を反映して該当Taskへ追記済み。参照マップ:
 
 | Gate | 参照Task |
 |---|---|
@@ -693,35 +693,21 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 | G-11 | JP-SPEC-010/020, JP-RFQ-010/020 |
 | G-12 | JP-SPEC-010, JP-PROP-020/060, JP-RFQ-010/020 |
 | G-13 | JP-LEAD-020/030, JP-RFQ-010/020/030, JP-RPT-030 |
+| G-14 | JP-RFQ-030（RFQ発行）, JP-PROP-070（Quotation送信） |
+| G-15 | JP-PROP-060（Quotation承認） |
 
 ---
 
-## Governance変更提案（2件・未裁定）
+## Governance変更提案（2件）→ 統合レビューで裁定済み
 
-> Governance Pack §9 への追記提案。採否は統合レビュー（14番）で裁定されるまで本書のTask定義には組み込んでいない（採択時に該当Taskのgatesへ追記する）。
+> 本書起案の2件はいずれも**採用**され、Governance Pack v1.1 §9 に正式登録された（詳細裁定は 05 v1.1 / 14-integration-review.md 参照）。
 
-### 提案1: G-14（SOFT）法規未着手のままの商流先行防止
-
-- gate_id: `G-14` / name: 法規チェック未着手 / type: SOFT
-- checkpoint: RFQ発行（JP-RFQ-030）および Quotation送信（JP-PROP-070）
-- condition: `Regulatory Status = NOT_CHECKED`
-- blocked_actions: なし（WARN付き進行可）
-- evidence: Regulatoryレコードの状態遷移ログ
-- override: WARN承認で進行可（発注前にはG-03系で担保）
-- 理由: 現行レジストリはRegulatory=BLOCKEDでの停止（G-03, HARD）のみで、「初期チェックすら未実施のまま見積・RFQが先行する」ケースに警告がない。タンブラー（食品接触）のような法規該当カテゴリで、後工程の手戻り（材質変更→再RFQ）を早期警告で防ぐ。
-
-### 提案2: G-15（SOFT）原価根拠なしQuotationの防止
-
-- gate_id: `G-15` / name: 工場Quote未登録 / type: SOFT
-- checkpoint: Quotation承認（JP-PROP-060内の承認）
-- condition: 対象Projectに登録済みQuoteが0件
-- blocked_actions: なし（WARN付き進行可。「概算」明記を強制）
-- evidence: quotesテーブルの登録状況
-- override: WARN承認で進行可（概算見積として顧客提示可能に保つ）
-- 理由: 実績レンジのみで作った顧客見積が「確定価格」として送られるマージン毀損事故（■51/C3の警告対象）を、承認画面上のWARNと「概算」透かし強制で防ぐ。
+- **提案1（G-14 法規チェック未着手・SOFT）**: 採用・`G-14` として正式化。A6の同番単独提案（13番 §7 提案-1）と一本化され、正式Gate定義は本書案どおり condition=`Regulatory=NOT_CHECKED`、checkpoint=RFQ発行（JP-RFQ-030）・Quotation送信（JP-PROP-070）。該当Taskの `gates` へ反映済み。
+- **提案2（G-15 工場Quote未登録・SOFT）**: 採用・`G-15` として正式化。checkpoint=Quotation承認（JP-PROP-060）、WARN付き進行可＝概算見積であることの明示（「概算」透かし強制）。該当Taskの `gates` へ反映済み。
 
 ## Change Log
 
 | 版 | 日付 | 変更 |
 |---|---|---|
 | v0.1 | 2026-08-10 | 初版Draft（A1）。全体マップ49プロセス、Vertical Slice 20Task（15項目完全形）、その他69Task、Task Generator 14ルール、NBA 15ルール、Automation Matrix A+B=80.9%、Governance変更提案2件 |
+| v0.2 | 2026-08-10 | 統合レビュー（14番）反映。G-14/G-15正式採用に伴うgates追記（JP-RFQ-030 / JP-PROP-060 / JP-PROP-070）、§7 Gate参照マップをv1.1レジストリへ更新、JP-REG-010のRegulatory遷移記述をA6 §1.5と整合（IR-09）、Status=Reviewed |

@@ -2,11 +2,11 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **Draft** |
-| 版 | v0.1 |
+| Status | **Reviewed** |
+| 版 | v0.2 |
 | 日付 | 2026-08-10 |
 | 作成 | A5（China Ops / 中文文書設計） |
-| 準拠 | 05-governance-pack.md v1.0（用語ZH列・ID体系§2・Status§3・Gate§9・ハイブリッド運用§11に完全準拠） |
+| 準拠 | 05-governance-pack.md v1.1（用語ZH列・ID体系§2・Status§3・Gate§9・ハイブリッド運用§11に完全準拠） |
 | 親ドキュメント | 01-architecture-overview.md / 02-agent-proposal.md |
 
 本書は Master Prompt ■35（中国側全Task）・■36（中国語文書テンプレート）・■63（工場用Excel 13シート）に対応する A5 成果物である。
@@ -31,7 +31,7 @@ Vertical Slice（0知識顧客 → Proposal → Requirement → RFQ → 中国�
 | CN-FACT-020 | 工場一次選別 / 工厂初筛 | CN_OFFICE | **W**·C | B_AI_DRAFT | [] |
 | CN-FACT-030 | 工場資格調査 / 工厂资质调查 | CN_OFFICE | **E**·W | B_AI_DRAFT | [] |
 | CN-FACT-040 | 工場実地監査 / 工厂实地审核 | CN_OFFICE | **E**·W·C | C_HUMAN_DECISION | [] |
-| CN-RFQ-010 | 見積依頼発行 / 询价（RFQ发出） | CN_OFFICE | **E**·C·W | B_AI_DRAFT | G-11, G-12, G-13 |
+| CN-RFQ-010 | 見積依頼発行 / 询价（RFQ发出） | CN_OFFICE | **E**·C·W | B_AI_DRAFT | G-11, G-12, G-13, G-14 |
 | CN-RFQ-020 | 見積収集 / 报价收集 | CN_OFFICE + FACTORY | **E**·C | B_AI_DRAFT | [] |
 | CN-RFQ-030 | 工場比較 / 工厂比较 | CN_OFFICE | **W** | B_AI_DRAFT | [] |
 | CN-SMP-010 | サンプル依頼 / 打样要求 | CN_OFFICE | **E**·C | B_AI_DRAFT | [] |
@@ -51,7 +51,7 @@ Vertical Slice（0知識顧客 → Proposal → Requirement → RFQ → 中国�
 | CN-PROD-020 | 首件確認 / 首件确认 | CN_OFFICE | **E**·W | C_HUMAN_DECISION | G-02, G-06 |
 | CN-PROD-030 | 試作量産 / 试产 | FACTORY | **C**·E | B_AI_DRAFT | [] |
 | CN-PROD-040 | 量産 / 大货生产（进度跟踪） | FACTORY + CN_OFFICE | **C**·W | A_FULL_AUTO | G-01 |
-| CN-INSP-010 | 工程内検査 / IPQC（制程巡检） | FACTORY | **E**·C | B_AI_DRAFT | [] |
+| CN-INSP-010 | 工程内検査 / 制程检验（IPQC） | FACTORY | **E**·C | B_AI_DRAFT | [] |
 | CN-INSP-020 | 機能全数検査 / 功能全检 | FACTORY | **E** | A_FULL_AUTO | G-05 |
 | CN-INSP-030 | 耐久・エージング試験 / 老化测试 | FACTORY | **E** | B_AI_DRAFT | [] |
 | CN-INSP-040 | 包装検査 / 包装检查 | FACTORY + CN_OFFICE | **E** | B_AI_DRAFT | [] |
@@ -59,7 +59,7 @@ Vertical Slice（0知識顧客 → Proposal → Requirement → RFQ → 中国�
 | CN-INSP-060 | 出荷検品 / 出货检验 | CN_OFFICE | **E**·W | C_HUMAN_DECISION | G-05 |
 | CN-INSP-070 | 手直し / 返工 | FACTORY | **E**·C | B_AI_DRAFT | G-05 |
 | CN-LOGI-010 | 出荷書類準備 / 出货资料准备 | CN_OFFICE + FACTORY | **E** | A_FULL_AUTO | [] |
-| CN-LOGI-020 | コンテナ積込監督 / 装柜监督 | CN_OFFICE | **C**·E | B_AI_DRAFT | [] |
+| CN-LOGI-020 | コンテナ積込立会 / 装柜监督 | CN_OFFICE | **C**·E | B_AI_DRAFT | [] |
 | CN-LOGI-030 | 出荷承認申請 / 出货批准申请 | CN_OFFICE | **W** | C_HUMAN_DECISION | G-04, G-05, G-06 |
 | CN-CMP-010 | 市場不良分析 / 售后不良分析 | CN_OFFICE + FACTORY | **E**·C | B_AI_DRAFT | [] |
 
@@ -76,9 +76,9 @@ task_id: CN-RFQ-010
 name: 見積依頼発行 / 询价（RFQ发出）
 purpose: 承認済み仕様から中国語询价单を生成し、候補工場へ配信して比較可能な報価を得る
 owner_role: CN_OFFICE
-trigger: Readiness.RFQ_READY=true かつ RFQ先工場リスト確定（Factory Score Engine推薦→人間選定済）
-inputs: [Specification, ProjectDNA, FactoryList, QualityStandard(草案可)]
-system_action: 询价单Excel（§4テンプレート）を工場ごとに生成、ProjectID/Version/透かし埋込、送信記録作成
+trigger: JP-RFQ-030（RFQ発行）完了＝承認済み询价单Excel+WeChatDigestの受領（前提: Readiness.RFQ_READY=true かつ RFQ先工場リスト確定）
+inputs: [RFQ(承認済・JP-RFQ-030生成の询价单Excel), Specification, ProjectDNA, FactoryList, QualityStandard(草案可)]
+system_action: JP-RFQ-030が生成した询价单Excel（§4テンプレート）のProjectID/Version/透かしを検証し工場別に送付準備、送信記録作成（Excel生成は日本側JP-RFQ-010〜030、中国側は確認・送付・記録を担う）
 ai_action: 日本語仕様→中国語询价単の翻訳ドラフト生成（§3翻訳ルール適用）、工場別の質問事項抽出
 human_action: CN_OFFICEが訳文・数量・品質要求を確認し、WeChat/メールで送付。送付先と日時を記録
 outputs: [RFQ（CI-XXXX-XXXX-RFQ-NN）, WeChatDigest送信記録]
@@ -89,7 +89,7 @@ notification: 回答期限超過→CN_OFFICEへ、2回超過→WeChatDigest再�
 related_docs: [询价单Excel, WeChatDigest]
 related_tables: [rfqs, factories, projects, documents]
 automation_class: B_AI_DRAFT
-gates: [G-11, G-12, G-13]
+gates: [G-11, G-12, G-13, G-14]
 ```
 
 ```yaml
@@ -239,7 +239,7 @@ Vertical Slice 検証用実例。日本側 Specification（CONFIRMED/PROVISIONAL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                       询  价  单 （RFQ）
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-项目编号: CI-2026-0001-RFQ-01          版本: V1
+询价单编号: CI-2026-0001-RFQ-01        版本: V1
 发出日期: 2026-08-10                   回复期限: 2026-08-15（周五）
 询价方:   贸易公司（中国办事处）        联系人: 中国办事处 王小姐（微信同号）
 致:       ＿＿＿＿＿（工厂名称）
@@ -253,9 +253,9 @@ Vertical Slice 検証用実例。日本側 Specification（CONFIRMED/PROVISIONAL
 │ 内胆材质     │ SUS304不锈钢，厚度≥0.4mm（需提供材质报告）             │
 │ 外壳材质     │ SUS201或SUS304（请分别报价）                          │
 │ 杯盖         │ 透明Tritan或PP+硅胶圈，防溅推盖式（请注明材质）         │
-│ 表面处理     │ 外壳粉末喷涂（喷粉），哑光；颜色2色：                   │
-│              │ 深灰 Pantone 7540C / 米白 Pantone 7527C               │
-│ Logo工艺     │ 激光雕刻，单面，尺寸约40×15mm（图案见附页图纸）         │
+│ 表面处理     │ 外壳粉末喷涂（喷粉），哑光；颜色1色：                   │
+│              │ 深蓝（藏青）Pantone 2767C 近似（暂定，以最终色板为准）  │
+│ Logo工艺     │ 丝网印刷（1色），单面，尺寸约40×15mm（图案见附页图纸）  │
 │ 真空工艺     │ 请注明：无尾真空 / 有尾真空                            │
 └────────────┴─────────────────────────────────────┘
 
@@ -265,12 +265,12 @@ Vertical Slice 検証用実例。日本側 Specification（CONFIRMED/PROVISIONAL
   ※ 如与贵司现有模具尺寸不符，请注明差异，可接受±3mm内的调整。
 
 三、数量与预测
-  本次询价数量: 1,000只（两色合计；深灰600 / 米白400）
+  本次询价数量: 1,000只（深蓝单色）
   年预测数量:   6,000〜10,000只（视日本市场销售情况）
 
 四、请贵司填写以下报价内容（黄色单元格）
 ┌──────────────┬──────────────────────────────┐
-│ 1. MOQ             │ ______ 只（如两色分开生产，请注明单色MOQ）      │
+│ 1. MOQ             │ ______ 只（单色。如多色时MOQ不同，请注明单色MOQ）│
 │ 2. 单价（EXW）      │ 1,000只: ______ 元/只（不含税另注明）           │
 │    阶梯价           │ 3,000只: ______ 元/只 ／ 5,000只: ______ 元/只 │
 │ 3. 模具费           │ ______ 元（如用公模请填0；私模请注明分摊条件）   │
@@ -294,10 +294,14 @@ Vertical Slice 検証用実例。日本側 Specification（CONFIRMED/PROVISIONAL
   5. 验收标准：GB/T 2828.1，一般检查水平II，
      CRITICAL 0 / MAJOR AQL 1.0 / MINOR AQL 2.5
 
-七、测试与证书（请勾选贵司现有项）
-  □ SUS304材质报告（内胆）          □ 食品接触材料测试报告（GB 4806系列）
-  □ 日本食品卫生法（厚生省告示370号）溶出测试报告（本项目出货日本必需，
+七、测试与证书（请勾选贵司现有项；标注★者为必须回复项，无则注明"无"）
+  ★ SUS304材质报告（内胆，注明钢厂/牌号）
+  ★ 杯盖树脂及硅胶密封圈材质证明（注明牌号/等级）
+  ★ 日本食品卫生法（厚生省告示370号）溶出测试报告（本项目出货日本必需，
     如无现成报告，请注明是否配合送测及费用分担意见）
+  □ 食品接触材料测试报告（GB 4806系列）
+  □ 树脂原料符合日本Positive List制度的适合声明/证明（杯盖/密封圈，强烈建议）
+  □ 涂装规格说明（粉体涂料种类；杯口部位有无涂层回绕，强烈建议）
   □ FDA / LFGB 报告（如有）         □ BSCI / ISO9001 等工厂认证（如有请附）
 
 八、ODM能力（选填，用于后续合作评估）
@@ -314,7 +318,8 @@ Vertical Slice 検証用実例。日本側 Specification（CONFIRMED/PROVISIONAL
 ```
 
 - 情報遮断チェック（Governance §8）: 本テンプレートには顧客名・顧客販売価格・目標原価・他工場情報の**フィールド自体が存在しない**（記入欄を作らないことで漏洩経路を断つ）。
-- G-11（Pantone未確定）/G-12（数量未確定）でWARNの場合は、該当欄を「暂定（テンプレ上は`暂定`ラベル）」表示で発行可。
+- G-11（Pantone未確定）/G-12（数量未確定）でWARNの場合は、該当欄を「暂定（テンプレ上は`暂定`ラベル）」表示で発行可（本実例の颜色欄はG-11 WARN中のため`暂定`表記）。
+- §七の法規関連要求項目（内胆/杯盖/密封圈の材质证明・告示370号報告・PL适合声明・涂装规格说明）は 13-a6 §3.6 の必須/強く推奨書類に対応する（統合レビューIR-05反映）。書類の有無はQuote比較の評価軸に含める。
 
 ---
 
@@ -323,7 +328,8 @@ Vertical Slice 検証用実例。日本側 Specification（CONFIRMED/PROVISIONAL
 Vertical Slice の終点成果物。黄金样確定後・生产前确认（CN-PROD-010）時点の**実出力例**。13シートExcel（§6）の中核シート（Sheet 3〜9）に相当する内容を文書形式で示す。
 
 > ファイル名: `CI-2026-0001_SPEC_V1_20260810_DRAFT.xlsx`
-> 表紙メタ: 项目编号 CI-2026-0001 / 文件编号 CI-2026-0001-DOC-01 / 版本 V1 / 水印 DRAFT（承認後APPROVED）
+> 表紙メタ: 项目编号 CI-2026-0001 / 文件编号 CI-2026-0001-DOC-02 / 版本 V1 / 水印 DRAFT（承認後APPROVED）
+> ※ DOC-01 は Proposal（11番 §8 STEP 3）に採番済みのため、本规格书は DOC-02（統合レビューIR-07反映）
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -349,11 +355,10 @@ Vertical Slice の終点成果物。黄金样確定後・生产前确认（CN-PR
    2.6 杯盖:     Tritan（透明），硅胶密封圈（铂金硫化），推盖式防溅结构
    2.7 真空:     无尾真空工艺；真空度以保温性能测试（5.2）为准
    2.8 表面处理: 外壳粉末喷涂哑光
-                 颜色A: 深灰 Pantone 7540C（600只）
-                 颜色B: 米白 Pantone 7527C（400只）
+                 颜色: 深蓝（藏青）Pantone 2767C（1,000只）
                  色差 ΔE≤1.5（对比签封色板）；涂层厚度 60-90μm
-   2.9 Logo工艺: 激光雕刻，杯身正面居中，底边上方25±1mm，
-                 尺寸40×15mm（矢量图 DOC-03），深度0.02-0.05mm，边缘无发黄
+   2.9 Logo工艺: 丝网印刷（1色，白色油墨），杯身正面居中，底边上方25±1mm，
+                 尺寸40×15mm（矢量图 DOC-03），边缘清晰无锯齿、无重影
 
 3. BOM概要（详细BOM见附表，工厂填写后签回）
    ┌──┬────────┬──────────┬────────────┐
@@ -390,7 +395,7 @@ Vertical Slice の終点成果物。黄金样確定後・生产前确认（CN-PR
    5.4 跌落测试:   每批抽3只：空杯自750mm自由跌落硬木板，杯口向下1次+侧面1次；
                    允许轻微变形，不允许破裂、涂层大面积剥落、保温失效（复测5.2）
    5.5 涂层附着:   百格测试≥4B；耐磨：橡皮擦1kg负荷50次不露底
-   5.6 Logo耐久:   酒精（75%）擦拭20次无明显褪色（激光雕刻一般不适用，留档）
+   5.6 Logo耐久:   酒精（75%）擦拭20次无明显褪色、无脱落（丝网印刷适用）
 
 6. 安全要求（食品接触材料）
    6.1 与食品接触部件（内胆/杯盖/密封圈）须符合:
@@ -419,7 +424,7 @@ Vertical Slice の終点成果物。黄金样確定後・生产前确认（CN-PR
        工厂对潜在缺陷的责任。
 
 9. 黄金样（签样）
-   9.1 双方签封黄金样各1套（两色各1只），有效期至订单完结或新版签样替换。
+   9.1 双方签封黄金样各1套（深蓝色1只），有效期至订单完结或新版签样替换。
    9.2 黄金样状态由系统管理（LOCKED后不可更改）；一切外观、颜色、手感争议
        以黄金样+限度样裁定。
    9.3 黄金样遗失或损坏须立即书面通知对方，重新签封。
@@ -574,22 +579,12 @@ ECR Status は Governance §3 の正準enum（DRAFT/SUBMITTED/UNDER_REVIEW/APPRO
 
 ---
 
-## 10. Governance変更提案（統合レビュー宛て・2件）
+## 10. Governance変更提案（2件）→ 統合レビューで裁定済み
 
-> Governance §0 の手続に従い、本節で起案する。採否は統合レビュー（14番）の裁定に委ねる。採択まで本文中の該当語は参考表記とする。
+> 2件とも**採用**され、Governance Pack v1.1 に正式登録された（詳細裁定は 05 v1.1 / 14-integration-review.md 参照）。
 
-**提案1: Canonical Glossary への用語追加（§1）**
-中国側Taskの記述に頻出するが正準表にない4語を追加したい。
-
-| 正準キー(EN) | 日本語 | 中国語 | 備考 |
-|---|---|---|---|
-| FactoryAudit | 工場監査 | 工厂审核 | 実地/書類監査の総称 |
-| IPQC | 工程内検査 | 制程巡检（IPQC） | 工場内の巡回検査 |
-| Rework | 手直し | 返工 | 判退後の選別・修理 |
-| LoadingSupervision | 積込監督 | 装柜监督 | 出荷時の立会 |
-
-**提案2: Factory配下エンティティのID形式追加（§2）**
-現行§2はProject配下（`{ProjectID}-{TYPE}-{NN}`）のみ定義しており、案件に紐付かない工場単位の記録（監査報告・資格調査・年次スコアスナップショット）のID形式がない。`FA-{NNNN}-{TYPE}-{NN}`（TYPE: AUD=監査 / QUA=资质调查 / SCR=スコアスナップショット）の追加を提案する。
+- **提案1（Glossary 4語追加）**: 採用・v1.1 §1 に正式登録。正式化された正準表記は **FactoryAudit=工場監査/工厂审核、IPQC=工程内検査/制程检验（IPQC）、Rework=手直し/返工、LoadingSupervision=積込立会/装柜监督**。提案時表記からの差分（IPQC中国語: 制程巡检→制程检验、LoadingSupervision日本語: 積込監督→積込立会）は本書 §1.2 の該当Task名へ反映済み。
+- **提案2（Factory付帯記録ID）**: 採用・v1.1 §2 に `FA-{NNNN}-{TYPE}-{NN}` として正式登録。正式TYPEコードは **AUD（監査）/ DOC（資質書類）/ CAPA** であり、提案時の QUA は DOC に統合、SCR（スコアスナップショット）は不採用（スコア履歴はDBレコードとして保持し独立IDは付与しない）。
 
 ---
 
@@ -598,3 +593,4 @@ ECR Status は Governance §3 の正準enum（DRAFT/SUBMITTED/UNDER_REVIEW/APPRO
 | 版 | 日付 | 変更 |
 |---|---|---|
 | v0.1 | 2026-08-10 | 初版Draft（A5）。中国側35Task・ハイブリッド運用設計・翻訳ルール12例・タンブラーRFQ/规格书実例・13シート対応表・Factory Score・Change Control を記載 |
+| v0.2 | 2026-08-10 | 統合レビュー（14番）反映。Vertical Slice仕様をA2顧客決定と整合（本体色=深蓝Pantone 2767C単色1,000只・Logo=丝网印刷1色: IR-02/03）、RFQ §七へA6 §3.6の法規書類要求を追加（IR-05）、规格书文件编号をDOC-02へ（IR-07）、CN-RFQ-010をJP-RFQ-030接続に整理しG-14追記（IR-08）、v1.1正準用語（制程检验/積込立会）反映（IR-10）、Status=Reviewed。フタ仕様（防溅盖 vs 密閉タイプ）はOpen Issue IR-04として未修正 |

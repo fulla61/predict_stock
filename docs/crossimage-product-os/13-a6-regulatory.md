@@ -2,8 +2,8 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **Draft / v0.1 / 2026-08-10 / A6** |
-| 準拠 | 05-governance-pack.md v1.0（Regulatory enum・G-03・Role正準キー）、01-architecture-overview.md、02-agent-proposal.md（A6役割定義） |
+| Status | **Reviewed / v0.2 / 2026-08-10 / A6** |
+| 準拠 | 05-governance-pack.md v1.1（Regulatory enum・G-03（v1.1明文化含む）・G-14・Role正準キー）、01-architecture-overview.md、02-agent-proposal.md（A6役割定義） |
 | 大原則 | **AIは法令の最終判断をしない。** 本Engineの出力は常に「適用法規の候補 + 判定根拠 + 専門家確認要否」であり、最終判断は人間（REG Role、必要に応じ外部専門家・所轄機関）が行う |
 | 法令記述の前提 | 本書の法令記述は **2026年1月時点の一般知識** に基づく設計用参考情報である。**実務では必ず最新の法令・政省令・告示・通知・所轄機関Q&Aを確認すること**（本書全節に適用） |
 
@@ -236,8 +236,8 @@ A5の中国語RFQテンプレート・A1のRFQ Taskに、以下を**必須添付
 ### 4.1 原則
 
 - **G-03（HARD）: Regulatory=BLOCKED → 該当工程停止。Override不可**（解除はREGによるStatus変更のみ）。Governance Pack §9 に完全準拠。
-- **Soft運用の範囲**: 法規未確認（NOT_CHECKED/CHECKING/REVIEW_REQUIRED）でも **RFQ・サンプルは警告付きで進行可**とする。理由: 法規確認には試験サンプルが必要であり、サンプル前に法規確定を求めると工程がデッドロックするため。
-- **Hardの範囲**: PRODUCTION_READY / SHIPMENT_READY は法規確定（APPROVED または NOT_APPLICABLE）なしに true にならない（§7 Governance変更提案-2 参照）。
+- **Soft運用の範囲**: 法規未確認（NOT_CHECKED/CHECKING/REVIEW_REQUIRED）でも **RFQ・サンプルは警告付きで進行可**とする。理由: 法規確認には試験サンプルが必要であり、サンプル前に法規確定を求めると工程がデッドロックするため。このうち `NOT_CHECKED` でのRFQ発行・Quotation送信は v1.1 で **G-14（SOFT）** として正式登録された（§7参照）。CHECKING/REVIEW_REQUIRED時のWARNは§4.2のReadiness不足理由表示として運用する。
+- **Hardの範囲**: PRODUCTION_READY / SHIPMENT_READY は法規確定（APPROVED または NOT_APPLICABLE）なしに true にならない（Governance Pack v1.1 §9 G-03行に明文化済み）。
 
 ### 4.2 Regulatory Status × Readiness 対応表
 
@@ -308,28 +308,18 @@ A5の中国語RFQテンプレート・A1のRFQ Taskに、以下を**必須添付
 
 ---
 
-## 7. Governance変更提案（2件）
+## 7. Governance変更提案（2件）→ 統合レビューで裁定済み
 
-Governance Pack §9 の手続に従い、以下を統合レビュー（14番）に起案する。**採否確定まで本書はWARN表示等の既存枠組み内で運用可能な記述としている。**
+> 裁定詳細は 05 v1.1 / 14-integration-review.md 参照。
 
-### 提案-1: Soft Gate `G-14 Regulatory未確認` の新設
+### 提案-1: Soft Gate `G-14 Regulatory未確認` → 採用（A1案と統合・一本化）
 
-| 項目 | 値 |
-|---|---|
-| gate_id | G-14 |
-| name | Regulatory未確認 |
-| type | SOFT |
-| checkpoint | RFQ発行時・サンプル発注時 |
-| condition | Regulatory Status ∈ {NOT_CHECKED, CHECKING, REVIEW_REQUIRED} |
-| blocked_actions | なし（WARN表示+法規確認Taskの自動起票のみ） |
-| evidence | Regulatory Assessment（checklist版数付き） |
-| override | WARN付き進行可 |
-| 理由 | 「法規未確認のままRFQ・サンプルが進んでいる」ことを可視化し、PRODUCTION_READY直前での手戻りを防ぐ。G-10〜G-13と同格のSoft Gateとして登録したい |
+- A1（10番）の同番提案 `G-14 法規チェック未着手` と**一本化して採用**され、v1.1 §9 に正式登録された。**本書の単独案（condition ∈ {NOT_CHECKED, CHECKING, REVIEW_REQUIRED}、checkpoint=RFQ発行・サンプル発注）は単独案としては不採用**であり、正式Gate定義は A1案ベース: condition=`Regulatory=NOT_CHECKED`、checkpoint=**RFQ発行・Quotation送信**、WARN付き進行可。
+- 本書単独案がカバーしていた CHECKING/REVIEW_REQUIRED 時の警告およびサンプル段階の警告は、Gateではなく **§4.2 の Readiness WARN表示（不足理由リスト）** として本書の枠組み内で維持する（REVIEW_REQUIRED時の試験計画Task自動起票も§4.2どおり維持）。
 
-### 提案-2: G-03 の条件補記（Readiness必須条件の明文化）
+### 提案-2: G-03 の条件補記（Readiness必須条件の明文化）→ 採用
 
-- 現行 G-03 は `Regulatory=BLOCKED → Production/Shipment停止` のみを定義している。これに加え、**Readiness定義の注記として「PRODUCTION_READY / SHIPMENT_READY は Regulatory Status が APPROVED または NOT_APPLICABLE であることを必須条件とする（BLOCKED以外の未確認Statusでも true にならない）」**を Governance Pack §3（Readiness行）または §9（G-03行）へ追記することを提案する。
-- 理由: 「BLOCKEDでなければ量産可」と誤読されると、未確認のまま量産に入る抜け道が生じる（=本書§1.1の「見落とし」と同型の最悪失敗）。本書§4.2はこの解釈を前提に書かれており、Governance本文への明文化で二重防御としたい。
+- v1.1 §9 G-03行の注記として明文化された: 「`PRODUCTION_READY` / `SHIPMENT_READY` は Regulatory が `APPROVED` または `NOT_APPLICABLE` であることが必須条件」。本書 §4.1/§4.2 はこの正式定義と整合済み。
 
 ---
 
@@ -338,3 +328,4 @@ Governance Pack §9 の手続に従い、以下を統合レビュー（14番）�
 | 版 | 日付 | 変更 |
 |---|---|---|
 | v0.1 | 2026-08-10 | 初版Draft（A6）。Regulatory Engine仕様・カテゴリ別マトリクス・タンブラー詳細マトリクス・G-03連動・Early Warning・免責体制・Governance変更提案2件 |
+| v0.2 | 2026-08-10 | 統合レビュー（14番）反映。提案-1はA1案と一本化のうえG-14として採用（本書単独案の残余はReadiness WARN表示として維持）、提案-2はG-03行に明文化済み。§4.1をv1.1正式定義参照へ更新、Status=Reviewed |

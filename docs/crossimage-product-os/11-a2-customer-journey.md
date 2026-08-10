@@ -2,11 +2,11 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **Draft** |
-| Version | v0.1 |
+| Status | **Reviewed** |
+| Version | v0.2 |
 | 日付 | 2026-08-10 |
 | 作成 | A2 顧客体験エージェント（Customer Journey / UX Designer） |
-| 準拠 | 05-governance-pack.md v1.0 / 01-architecture-overview.md / 02-agent-proposal.md |
+| 準拠 | 05-governance-pack.md v1.1 / 01-architecture-overview.md / 02-agent-proposal.md |
 
 本書は「商品作り知識0の日本の顧客が離脱せず商品化まで進む」ための顧客体験を定義する。
 用語・ID・Status・DNAコード・Gateは Governance Pack に完全準拠する。新規に必要となった分類は末尾「Governance変更提案」に起案した。
@@ -41,7 +41,7 @@ Journeyは表示上の地図であり、**Workflowは Task Generator が Project
 | Repeat | Entry Route D | Journey表示自体を省略し、差分確認画面のみ |
 
 - 層をまたぐ移動でも入力済みデータは全て保持（SpecFieldのStatusで管理し、二重入力を禁止する）。
-- Soft Gate（G-10〜G-13）は WARN 付き進行可のため、Journey上「未確定のまま先へ進む」導線を常に残す。Hard Gate（G-01〜G-06）該当工程のみ進行ボタンを物理的に無効化する。
+- Soft Gate（G-10〜G-15）は WARN 付き進行可のため、Journey上「未確定のまま先へ進む」導線を常に残す。Hard Gate（G-01〜G-06）該当工程のみ進行ボタンを物理的に無効化する。
 
 ---
 
@@ -103,7 +103,7 @@ Journeyは表示上の地図であり、**Workflowは Task Generator が Project
   → Requirement Analyzer が5分類
      Known（判明）/ Missing（不足）/ Conflicting（矛盾）/
      Assumption（AI補完可能な仮定）/ Critical Missing（これが無いと提案不能）
-  → 質問候補を生成し3分類（Governance変更提案①のenum）
+  → 質問候補を生成し3分類（QuestionClass正準enum、Governance Pack v1.1 §3）
      BLOCKER          : Critical Missing 由来。Proposal確定を止める（G-10、Soft）
      IMPORTANT_LATER  : Missing/Conflicting 由来。RFQ〜サンプルまでに必要
      OPTIONAL         : Assumptionの確認。答えなくても既定値で進行
@@ -162,7 +162,7 @@ Journeyは表示上の地図であり、**Workflowは Task Generator が Project
 ### 4.3 Early Warning（安全・法規のみ、明確に表示）
 
 - 表示例（タンブラー、飲料が触れる容器のため食品衛生法の対象）:
-  > ⚠️ **お知らせ（重要）**: 飲み物に直接触れる商品は、法律で定められた検査（食品衛生法）に合格する必要があります。検査の手配は当社が行いますが、費用と約2〜3週間の期間がかかります。スケジュールに織り込んでご案内します。
+  > ⚠️ **お知らせ（重要）**: 飲み物に直接触れる商品は、法律で定められた検査（食品衛生法）に合格する必要があります。検査の手配は当社が行いますが、費用（目安10〜30万円）と3〜6週間程度の期間がかかります。スケジュールに織り込んでご案内します。（費用・期間はA6 §3.2の試験リスト目安と整合）
 - 「量産成功のための重点管理項目」のポジティブ表現とは区別し、Early Warningは黄色帯+⚠️で早期（Proposal画面）に表示。Regulatory Statusが `BLOCKED` の場合の工程停止（G-03）は社内側で管理し、顧客には「必要な検査の完了をお待ちください」と表示する。
 
 ---
@@ -194,7 +194,7 @@ Journeyは表示上の地図であり、**Workflowは Task Generator が Project
 ```
 ┌──────────────────────────────────────────────┐
 │ [1] YOUR PRODUCT  あなたの商品                 │
-│  ┌────────┐ オリジナルタンブラー 450ml         │
+│  ┌────────┐ オリジナルタンブラー 350ml         │
 │  │商品画像 │ マットネイビー / ロゴ1色印刷       │
 │  │(最新版) │ 数量: 1,000個                     │
 │  └────────┘ 仕様の確定度: ■■■■□ 80%          │
@@ -348,7 +348,7 @@ Journeyは表示上の地図であり、**Workflowは Task Generator が Project
 > | 気をつける点 | 他社と形が似る可能性 | 色の再現確認が重要（色見本ですり合わせ） | 初期費用大・数量多め・期間長め |
 >
 > ※概算は数量1,000個・現在の為替水準での目安です。正式なお見積りは工場確認後にご案内します。
-> ⚠️ **お知らせ（重要）**: 飲み物に直接触れる商品は、法律で定められた検査（食品衛生法）に合格する必要があります。検査の手配は当社が行います（費用と約2〜3週間の期間がかかります）。
+> ⚠️ **お知らせ（重要）**: 飲み物に直接触れる商品は、法律で定められた検査（食品衛生法）に合格する必要があります。検査の手配は当社が行います（費用と3〜6週間程度の期間がかかります）。
 >
 > ［OPTION Aで進める］［OPTION Bで進める］［OPTION Cで進める］［迷っているので相談したい］
 
@@ -376,7 +376,7 @@ Journeyは表示上の地図であり、**Workflowは Task Generator が Project
 > **プランを固めましょう（1/2）**
 >
 > **Q4. 容量はどうしますか？**
-> ○ 350ml（持ち歩きに軽い） ●450ml（売れ筋サイズ） ○ 500ml以上
+> ● 350ml（持ち歩きに軽い） ○ 450ml（売れ筋サイズ） ○ 500ml以上
 > 💡 E-04: 350mlはコンビニコーヒーMサイズ相当、450mlはタンブラーの売れ筋サイズです。車のドリンクホルダーに入れるなら底の直径もチェックポイントです。
 >
 > **Q5. フタはどのタイプ？**
@@ -387,9 +387,9 @@ Journeyは表示上の地図であり、**Workflowは Task Generator が Project
 > ● ロゴを1色で印刷（シンプル・低コスト） ○ フルカラー印刷 ○ レーザー彫刻（高級感）
 > 💡 E-05: 印刷方法で仕上がりと価格が変わります。1色ロゴは低コスト、フルカラーやレーザー彫刻は高級感が出ますが単価が上がります。
 
-【入力】450ml / 密閉タイプ / 1色印刷
+【入力】350ml / 密閉タイプ / 1色印刷
 
-【内部】SpecField: `capacity=450ml(PROVISIONAL)` / `lid_type=密閉スクリュー(PROVISIONAL)` / `decoration=シルク印刷1色(PROVISIONAL)`。密閉選択により QualityProfile 重点候補へ「フタ密閉性能」追加
+【内部】SpecField: `capacity=350ml(PROVISIONAL)` / `lid_type=密閉スクリュー(PROVISIONAL)` / `decoration=シルク印刷1色(PROVISIONAL)`。密閉選択により QualityProfile 重点候補へ「フタ密閉性能」追加
 
 ### STEP 6: 品質レベル選択（専門用語なし）
 
@@ -444,7 +444,7 @@ Journeyは表示上の地図であり、**Workflowは Task Generator が Project
 【画面】
 > **ここまでの内容をご確認ください。** 確定後、工場への見積依頼の準備に入ります。
 >
-> 🔒 **あなたの決定**: OPTION B（色+オリジナル箱）/ 450ml / 密閉フタ / ロゴ1色印刷 / 品質: ブランド重視 / 数量 1,000個
+> 🔒 **あなたの決定**: OPTION B（色+オリジナル箱）/ 350ml / 密閉フタ / ロゴ1色印刷 / 品質: ブランド重視 / 数量 1,000個
 > 💡 **当社のおすすめ（確認中の想定）**: 本体色 濃紺・マット（お送りいただいた画像基準。サンプルで最終確認）/ 材質 ステンレス真空断熱 / 内側 ステンレス素地
 > 🏭 **工場からの回答**: 見積依頼後にここへ表示されます
 >
@@ -498,17 +498,18 @@ Journeyは表示上の地図であり、**Workflowは Task Generator が Project
 
 ---
 
-## Governance変更提案
+## Governance変更提案（2件）→ 統合レビューで裁定済み
 
-| # | 提案 | 内容 | 理由 |
-|---|---|---|---|
-| ① | §3 Status体系への追加: **質問分類enum** `BLOCKER / IMPORTANT_LATER / OPTIONAL` | Requirement Analyzerが生成する質問の正準分類として登録 | G-10・Task定義票の `blocking_condition` が「BLOCKER質問」を参照しているが、正準enumが未定義。A1のTask定義・A3のテーブル定義（questionsテーブル想定）と共有するため正準化が必要 |
-| ② | §3 Status体系への追加: **教育文言（EducationCard）管理Status** `TEMPLATE / AI_DRAFT / APPROVED / RETIRED` | Just-in-Time Education文言集のライフサイクル管理 | §4.1で「AI新規生成文言はSALES承認後に文言集へ追記」と定めており、承認状態の正準管理が必要（既存Approval enumは文書承認用でライフサイクルが合わない）。代替案: 既存 `Approval` enum流用で可なら本提案は取り下げ可 |
+> 裁定詳細は 05 v1.1 / 14-integration-review.md 参照。
 
-（提案は以上2件。本文中の画面名・表示区分名〔YOUR PRODUCT等〕はUIラベルでありシステムenumではないため、新設Statusには該当しない。）
+- **提案①（QuestionClass enum）**: 採用。`BLOCKER / IMPORTANT_LATER / OPTIONAL` が Governance Pack v1.1 §3 の正準enum **QuestionClass** として正式化された。本書 §3.1 は正準enum参照へ更新済み。
+- **提案②（教育文言ライフサイクルStatus）**: 不採用。提案文中の代替案どおり**既存 `Approval` enum（PENDING/APPROVED/REJECTED/CONDITIONAL）を流用**する（新Status体系は新設しない）。§4.1 の「AI新規生成文言はSALES承認後に文言集へ追記」はApprovalレコードで管理する。
+
+（本文中の画面名・表示区分名〔YOUR PRODUCT等〕はUIラベルでありシステムenumではないため、新設Statusには該当しない。）
 
 ## Change Log
 
 | 版 | 日付 | 変更 |
 |---|---|---|
 | v0.1 | 2026-08-10 | 初版Draft（A2） |
+| v0.2 | 2026-08-10 | 統合レビュー（14番）反映。Vertical Slice容量を350mlへ統一（IR-01、A5/A6と整合）、Early Warning費用・期間をA6数値（10〜30万円・3〜6週間）へ統一（IR-06）、QuestionClass正準enum参照化、Soft Gate参照範囲をG-10〜G-15へ更新、Status=Reviewed |
