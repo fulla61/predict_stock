@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **v2.3 APPROVED（v2.0差分はオーナー指示「Category-Agnostic Core」「言語設計ルール」を反映。v2.1/v2.2差分はA8/A9/A3/A4提案の裁定、v2.3差分はA7条件C-05起案のDoD-1範囲改訂によるもので、オーナー事後確認事項）** |
+| Status | **v3.0 APPROVED（v3.0差分はオーナー指示「実商流の統合」（Commercial Feasibility Loop・Cost Architecture・Profile分離・Production Reference等）を最上位制約として反映。過去差分の経緯はChange Log参照）** |
 | 適用範囲 | Crossimage Product OS に関わる全エージェント（A1〜A7, B1〜B6, C1〜C4, 運用AI Engine）および全設計・実装成果物 |
 | 変更手続 | 本書の変更は秘書AIがChange Logに追記し、オーナー承認後に発効。**各エージェントによる勝手な用語・Status・ID の新設は禁止**（必要時は「Governance変更提案」として成果物末尾に記載し、統合レビューで採否判定） |
 
@@ -13,6 +13,11 @@
 3. **最初の Vertical Slice**: `0知識顧客 → Proposal → Requirement → RFQ → 中国語工場仕様書出力` を、テストケース第1号（タンブラー）で通しで検証する。これはUniversal Core+Rule Pack機構の検証であり、タンブラー専用設計の根拠にしてはならない。
 4. **A7 Red Team 承認までコード実装は禁止**。
 5. **最上位目的**: 商品開発知識ゼロの顧客からプロまで受け入れ、どんな商品でも要求を構造化し、最適な製造能力・品質・価格・リスク管理を設計し、少人数で大量案件を安全かつ高収益に回し、リピートまで自動化すること。評価指標は機能数ではなく、顧客（簡単・作りたくなる・安心・また頼みたい）/ 商社（作業が少ない・利益と責任が見える）/ 中国側（指示が明確・往復が少ない）/ 結果（低クレーム・高品質・高粗利・高リピート）。
+6. **実商流原則（v3.0）**: Crossimageは価格表から販売する会社ではない。**「最初に商品価格・MOQ・仕様が確定している」ことを前提にしたArchitectureを禁止**する。価格・MOQ・数量・仕様は Commercial Feasibility Loop（§16）の中で工場回答と顧客判断により収束していく。顧客の予算・数量は必須確定値ではない（BudgetStatus / QuantityStatus、§3）。
+7. **Scope境界（v3.0）**: 顧客企業のマーケティング（広告運用・SNS運用・EC運営・販売促進）は基本Scope外であり主要機能にしない。物流Scopeは原則「日本国内の顧客指定納品先まで」とし、Incoterms（貿易条件：費用と危険の分岐点の国際規則）と契約により変わるため案件ごとに Delivery Responsibility Point（納品責任分岐点）を記録する。
+8. **Phase 0確定分類（v3.0）**: 設計要素は `ARCHITECTURE_LOCK`（後から変えると大改修になる構造）/ `CONFIGURABLE_RULE`（管理データとして変更可能）/ `CALIBRATION_VALUE`（実案件データで校正する数値）に分類し、Phase 0では LOCK のみ確定する。全数値の固定を禁止。
+9. **仮定の禁止（v3.0）**: オーナーが明示していない商流・商品カテゴリー・顧客条件を前提化しない。仮定が必要な場合は `ASSUMPTION:` として明示し、不明事項は推測確定せず `CONFIGURABLE` または `TBD` とする。
+10. **納品はProjectの終了ではない（v3.0）**: 納品後のFeedback→改善→Repeat / Version Up / New Product までを商流の一部として扱う（§19）。
 
 ---
 
@@ -114,6 +119,16 @@
 | Shipment | `PREPARING / RELEASE_REQUESTED / RELEASED / SHIPPED / ARRIVED / DELIVERED / CANCELLED`（v2.2追加、A3提案。RELEASED以外での船積み禁止） |
 | Complaint進行 | `RECEIVED / INVESTIGATING / CORRECTING / RESOLVED / CLOSED`（v2.2追加、A3提案） |
 | CAPA | `REQUESTED / SUBMITTED / IN_IMPLEMENTATION / VERIFICATION / CLOSED`（v2.2追加、A3提案） |
+| BudgetStatus（予算状態、v3.0） | `UNKNOWN / TARGET_UNIT_PRICE / MAX_UNIT_PRICE / TOTAL_PROJECT_BUDGET / FLEXIBLE / BENCHMARK`。Target Priceを必須入力にしない。UNKNOWNでも案件開始可 |
+| QuantityStatus（数量状態、v3.0） | `UNKNOWN / TARGET_QUANTITY / MIN_DESIRED / MAX_ACCEPTABLE / ANNUAL_FORECAST / TRIAL_LOT / FLEXIBLE_BASED_ON_MOQ`。工場MOQを見て顧客が数量変更できる前提 |
+| CustomerDecision（Loop分岐、v3.0） | `ACCEPT / MODIFY / NEGOTIATE / RE_SOURCE / RE_RFQ / HOLD / REJECT`（§16） |
+| CostStatus（費用状態、v3.0） | `ESTIMATED / AI_ESTIMATED / FACTORY_QUOTED / THIRD_PARTY_QUOTED / CONFIRMED / INVOICED / PAID / ACTUAL`。見積と実績の混同禁止 |
+| CostResponsibility（費用負担主体、v3.0） | `CLIENT / CROSSIMAGE / FACTORY / LOGISTICS_PROVIDER / OTHER / TBD` |
+| CostClass（費用分類、v3.0） | `ONE_TIME / RECURRING / VARIABLE_EXTERNAL / EXCEPTION` |
+| DutyStatus（関税・輸入税の確度、v3.0） | `AI_ESTIMATE / REVIEW_REQUIRED / BROKER_CONFIRMED / FINAL / ACTUAL`。AIだけで関税・法令を最終確定しない |
+| FeedbackType（商品Feedback分類、v3.0） | `DEFECT / FUNCTION / DURABILITY / USABILITY / APPEARANCE / PACKAGING / LOGISTICS / INSTRUCTION / MISUSE / IMPROVEMENT_REQUEST / NEW_FEATURE_REQUEST / POSITIVE / OTHER` |
+| FeedbackCause（原因区分、v3.0） | `PRODUCT_FAILURE / DESIGN / MANUFACTURING / TRANSPORT / INSTRUCTION_GAP / CLIENT_USAGE / END_USER_MISUSE / UNKNOWN`（UNKNOWN≠商社責任） |
+| 設計要素分類（v3.0） | `ARCHITECTURE_LOCK / CONFIGURABLE_RULE / CALIBRATION_VALUE`（§0-8） |
 
 ## 4. Project DNA（8軸・正準コード）
 
@@ -184,7 +199,7 @@ Gate定義フォーマット: `gate_id / name / type / checkpoint / condition / 
 | ID | 名称 | 種別 | 停止対象 | Override |
 |---|---|---|---|---|
 | G-01 | 正式発注なし | HARD | MassProduction開始 | 不可 |
-| G-02 | GoldenSample未LOCKED | HARD | 正式量産開始 | 不可 |
+| G-02 | **Approved Production Reference Set未確定**（v3.0改訂: 「何を正として量産するのか」の確定が本質。Golden Sampleは手段の一つ。案件が要求するReference Set＝Golden Sample / Approved Specification / Approved Drawing / Approved BOM / Approved Artwork / Approved Color Sample / Approved Packaging / Previous Approved Production の組合せが揃っていること。必要Setの構成はDNA・Rule Packで決まるCONFIGURABLE_RULE） | HARD | 正式量産開始 | 不可 |
 | G-03 | Regulatory=BLOCKED | HARD | Production/Shipment（該当工程） | 不可（REG承認でStatus変更のみ）。※v1.1明文化: `PRODUCTION_READY` / `SHIPMENT_READY` は Regulatory が `APPROVED` または `NOT_APPLICABLE` であることが必須条件（A6提案） |
 | G-04 | Critical Issue未解決 | HARD | ShipmentRelease | 不可 |
 | G-05 | 検品未完了/FAIL未処理 | HARD | ShipmentRelease | 不可 |
@@ -214,6 +229,8 @@ Gate定義フォーマット: `gate_id / name / type / checkpoint / condition / 
 | `17-a7-red-team.md` | A7 | Red Teamレビュー・トラブルケース・承認判定 |
 | `18-category-rule-packs.md` | A8 | Category Rule Pack設計・属性ルールエンジン・20カテゴリー比較表（v2.0追加） |
 | `19-language-ux.md` | A9 | 言語設計・用語辞書（Glossary）・Tooltip仕様・レベル別説明・初心者モードUI（v2.0追加） |
+| `22-final-architecture-review.md` | A10 | 最終Business Architecture Review（実商流統合・24項目、v3.0追加） |
+| `23-stress-test.md` | A11 | 20ケースStress Test（v3.0追加） |
 
 ## 11. ハイブリッド・チャネル運用原則（Web / Excel / WeChat要約）
 
@@ -287,7 +304,55 @@ UI上の全専門用語 / 顧客向け説明文 / Workflow説明 / Dashboard表�
 - **表示層は日本語主・英語従**: 見出し・ラベルは日本語を主とし、英語用語は括弧内補助に置く（例: 「見積依頼（RFQ）」であり「RFQ（見積依頼）」を主見出しにしない。本文中の初出フォーマットは従来どおり）
 - **略語衝突時のフル表記義務**: 同一略語が複数の意味を持ちうる場合（例: BL＝船荷証券）、初出時は必ずフル表記＋日本語説明とする
 
-## 15. Phase 0 Definition of Done
+## 16. Commercial Feasibility Loop（v3.0・中核Workflow）
+
+実商流の中核。以下のLoopをUniversal Coreの第一級Workflowとして扱う。
+
+```
+CUSTOMER INTENT → REQUIREMENT STRUCTURING → FACTORY SEARCH → RFQ
+→ FACTORY RESPONSE → FEASIBILITY ANALYSIS → COST SIMULATION
+→ CUSTOMER OPTIONS → CUSTOMER DECISION
+   ├ ACCEPT（次工程へ） ├ MODIFY（条件変更） ├ NEGOTIATE（工場交渉）
+   ├ RE_SOURCE（別工場探索） ├ RE_RFQ（再見積） ├ HOLD（保留） └ REJECT（終了/代替案）
+```
+
+- **Loopは1回で終わらない前提**。各周回を `CommercialLoop`（`{ProjectID}-LOOP-{NN}`）として記録し、①なぜ条件が変わったか ②誰が変更したか ③どの工場回答（Quote Version）を根拠にしたか を追跡可能にする。
+- **MOQは工場の固定属性ではない**。`Factory × Requirement Version × Specification × Quote Version` に紐づく Commercial Condition として管理。MOQ次元（per Order / SKU / Color / Size / Material / Packaging / Custom Mold 等）は CONFIGURABLE_RULE。
+- **Quote Version**: 見積は `QT-…` の版として保持し旧版の上書き禁止。各版に前提条件（数量 / Specification Version / 為替 / 運賃前提 / 関税前提 / 有効期限 / Incoterms / 納品地 / 含む費用・含まない費用）を記録し、価格差の原因を後から追跡できること。
+- **成立しない場合はOption型提案**（単純な「できません」禁止）: 何を維持し何を変更すれば成立するかを OPTION A/B/C（数量優先/価格優先/オリジナル性優先 等）で提示。AIがOption案を作成できるが、価格・工場・商社利益・重要条件を含む正式顧客提案は Human Approval を基本とする。
+- **工場探索は最安検索ではない**: Can Manufacture? / MOQ / Price / 開発力 / 金型能力 / 品質能力 / 納期 / 生産能力 / 日本市場経験 / コミュニケーション / リスク を案件の優先軸（価格/MOQ/品質/開発力/納期）に応じて評価する。
+- **Human Decision Pointの最適化**: 人間判断（価格交渉・工場選定・顧客提案・重要品質・例外）は残す。ただし人間にExcel比較・転記・計算・翻訳・情報探索・回答整理をさせない。System/AIが顧客希望・各工場回答・差分・リスク・利益・推奨案を整理し、人間には APPROVE / MODIFY / NEGOTIATE / RE_SOURCE / REJECT 等の判断だけを提示する。
+
+## 17. Cost Architecture（v3.0）
+
+- **Cost Ledger（費用台帳）**: `Factory Price + Freight` の単純構造を禁止。費用カテゴリー（製造 / 開発・初期 / 品質・試験 / 中国国内 / 国際物流 / 日本輸入 / 日本国内物流 / その他・例外）を初期シードとして持ちつつ、**案件ごとに Custom Cost Item を追加可能**にする（固定リスト化の禁止）。
+- **各Cost Itemの必須属性**: CostStatus / CostClass / CostResponsibility（いずれも§3 enum）+ Source / Evidence（見積ファイル等）/ Valid Until / Currency / Exchange Rate / Assumption / Confidence / Updated At。「なぜこの金額か」を後から確認可能にする。
+- **税率・関税・計算方法のハードコード禁止**: 商品・時期・取引条件で変わるため CONFIGURABLE。関税は HS Code Candidate / 原産国 / 課税価格 / 税率候補 / EPA・FTA・RCEP（経済連携協定：関税優遇の可能性）適用候補 / 概算額 を DutyStatus 付きで管理。
+- **Landed Cost（顧客指定納品地点までの総原価）**: Estimated / Confirmed / Actual の3段階を比較可能にする。
+- **見積構造**: `Factory Quote → Cost Ledger → Estimated Landed Cost → Crossimage Margin / Fee → Client Quotation`。Clientに工場原価・マージン・他工場見積・内部リスクコストを表示しない（§8遮断と同一）。
+
+## 18. Profile分離（v3.0）
+
+Project DNAへ全情報を詰め込まない。以下を分離し相互参照する（各Profileの詳細フィールドは設計文書で定義、ここでは分離原則のみ規定）:
+
+| Profile | 問い |
+|---|---|
+| **Product Attributes** | 何を作っているか（§13の属性タグ＋商品仕様） |
+| **Project DNA** | この案件をどう運営するか（§4の8軸） |
+| **Commercial Profile** | この案件が商業的に成立する条件（BudgetStatus / Target Price / Total Budget / QuantityStatus / Target Quantity / Acceptable MOQ / Target Delivery / Cost・Quality・ODM優先度 / 初期投資許容度 等） |
+| **Quality Profile** | どの品質水準が必要か（Q1〜Q4は顧客・社内の理解補助として維持。内部はSafety / Function / Durability / Appearance / Sensory / Packaging のDimension別管理。Safety・Legal・Critical FunctionはFIXED MINIMUM） |
+| **Regulatory Profile** | どの法規確認が必要か |
+| **Factory Profile** | どんな工場が必要か |
+
+## 19. Feedback・Product Evolution・Knowledge資産化（v3.0）
+
+- **納品でProjectを完全終了しない**。Complaintとは別に `ProductFeedback`（FeedbackType / FeedbackCause、§3）を管理し、Product / Product Version / Lot / Factory / 日付 / Source / Severity / 写真・動画 / 原因 / 責任 / Action を紐付ける。**「問題が起きた＝Crossimage責任」にならない証跡設計**（原因区分と証拠を必須化）。
+- **Product Evolution**: `Product V1 → Feedback → V1.1 → V2` のVersion系譜を管理し、Version間で仕様差分 / BOM差分 / 品質差分 / 工場差分 / コスト差分 / 対応したFeedback / 変更理由 を比較可能にする。
+- **Repeat Order**: 前回Approved Dataを再利用し、再確認が必要な項目（工場価格 / MOQ / 材料 / 納期 / 運賃 / 為替 / 法規 / 部品供給可否）だけ自動チェックする。
+- **Next Product**: 別商品の新Projectでも Client Profile / ブランド期待 / 品質嗜好 / 商流履歴 / 過去問題 / 工場経験 / 承認傾向 を引き継げる設計にする。
+- **Knowledge資産化**: Client Knowledge・Factory Knowledge を実績から蓄積し、Factory推薦 / コスト・MOQ・納期推定 / 品質推薦 / リスク予測 の精度を案件数とともに向上させる。**AI推定値は必ず「推定」と表示し、顧客確定情報・実績と区別**する。
+
+## 20. Phase 0 Definition of Done
 
 以下を全て満たした時点で Phase 0 完了とする。
 
@@ -300,6 +365,9 @@ UI上の全専門用語 / 顧客向け説明文 / Workflow説明 / Dashboard表�
 7. 本書への未裁定の「Governance変更提案」が残っていない
 8. **Category-Agnostic遵守（v2.0追加)**: 全設計にカテゴリー固有ロジックのハードコードが存在しないこと。`18-category-rule-packs.md` に最低20カテゴリー×10軸の比較表と属性ベースRule組立設計が存在すること。具体例には「例でありシステム仕様ではない」注記があること
 9. **言語ルール準拠（v2.0追加)**: 顧客向け文言・Dashboard・エラーメッセージの設計に英語専門用語の単独出現（日本語補足なし）がゼロであること。`19-language-ux.md` に用語辞書とTooltip仕様が存在すること
+10. **実商流統合（v3.0追加）**: 最終Business Architecture Review（22番）が存在し、①価格・MOQ・仕様の事前確定を前提とする箇所の排除方針 ②Commercial Feasibility Loop ③Cost Architecture ④Profile分離 ⑤Production Reference Gate が反映され、20ケースStress Test（23番）でArchitecture変更なしに処理可能なことが確認されていること
+11. **KPI拡張（v3.0追加）**: Automation Rate単独ではなく、Human Touch Time per Project / Human Administrative Time / Human Decision Count / Time to First Proposal / Time to First Factory Quote / RFQ Turnaround / Commercial Loop回数 / Quote Acceptance Rate / Estimate vs Actual Cost Variance / Gross Margin Variance / MOQ Acceptance Rate / Sample Iteration Count / 不良率 / 納期遵守 / Feedback Rate / Repeat Rate / Version Improvement Rate を計測KPIとして設計に含むこと
+12. **MVP Automation方針（v3.0追加）**: 初期MVPは「AIが自動作成→人間確認→送信」を基本とし、顧客・工場への重要情報を初日から完全自動送信しない。実績が蓄積したTaskからHuman Approvalを段階的に外す
 
 ## Change Log
 
@@ -311,3 +379,4 @@ UI上の全専門用語 / 顧客向け説明文 / Workflow説明 / Dashboard表�
 | v2.1 | 2026-08-10 | A8/A9のGovernance変更提案5件を全件採用: Rule Pack ID `RP-{NNN}`（A8①）、RulePack Status enum（A8②）、19番辞書40語の正準扱い（A9①）、表示層の日本語主・英語従原則（A9②）、略語衝突時フル表記義務（A9③）。あわせてIR-13を裁定: Automation A+B比率のDoD集計単位は「日本側+中国側の全Task合算」と定義（未達の場合は無理な再分類をせずA7/オーナー判断事項として記録） |
 | v2.2 | 2026-08-10 | A3/A4のGovernance変更提案8件を全件採用: SpecVersion・PO・Sample実体・Shipment・Complaint進行・CAPAの各Status enum（A3①〜⑤）、TYPEコード`CLM`（A4①）、Soft Gate G-16 未実証Claim表現（A4②）、Glossary 2語 Claim/DUPRO（A4③、19番辞書への追補はA7後の最終整合パスで実施） |
 | v2.3 | 2026-08-10 | A7条件C-05の起案によるDoD-1範囲改訂: §15-1の対象を`10〜17`から`10〜19`へ拡大（v2.0で18・19を追加した際にDoD範囲が未更新だった欠陥の是正=RT-04）。他の変更なし。19番辞書へのClaim/DUPRO追補（v2.2予告分）は19番v0.2で実施済み |
+| v3.0 | 2026-08-10 | オーナー指示「実商流の統合」: §0-6〜10（実商流原則・Scope境界・確定分類・仮定禁止・納品後継続）、§3に9 enum追加（BudgetStatus/QuantityStatus/CustomerDecision/CostStatus/CostResponsibility/CostClass/DutyStatus/FeedbackType/FeedbackCause）+設計要素分類、G-02をApproved Production Reference Setへ改訂、§16 Commercial Feasibility Loop、§17 Cost Architecture、§18 Profile分離、§19 Feedback・Evolution・Knowledge資産化、DoDに10〜12項追加、22番・23番を割当。旧§15 DoDは§20へ改番 |
