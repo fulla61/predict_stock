@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **v2.2 APPROVED（v2.0差分はオーナー指示「Category-Agnostic Core」「言語設計ルール」を反映。v2.1/v2.2差分はA8/A9/A3/A4提案の裁定によるもので、オーナー事後確認事項）** |
+| Status | **v2.3 APPROVED（v2.0差分はオーナー指示「Category-Agnostic Core」「言語設計ルール」を反映。v2.1/v2.2差分はA8/A9/A3/A4提案の裁定、v2.3差分はA7条件C-05起案のDoD-1範囲改訂によるもので、オーナー事後確認事項）** |
 | 適用範囲 | Crossimage Product OS に関わる全エージェント（A1〜A7, B1〜B6, C1〜C4, 運用AI Engine）および全設計・実装成果物 |
 | 変更手続 | 本書の変更は秘書AIがChange Logに追記し、オーナー承認後に発効。**各エージェントによる勝手な用語・Status・ID の新設は禁止**（必要時は「Governance変更提案」として成果物末尾に記載し、統合レビューで採否判定） |
 
@@ -291,7 +291,7 @@ UI上の全専門用語 / 顧客向け説明文 / Workflow説明 / Dashboard表�
 
 以下を全て満たした時点で Phase 0 完了とする。
 
-1. `10`〜`17` の全成果物が `Reviewed` 以上で存在する
+1. `10`〜`19` の全成果物が `Reviewed` 以上で存在する（v2.3改訂: v2.0で追加された`18`・`19`を範囲に含める。旧範囲`10〜17`はGovernance自体の欠陥=RT-04） 
 2. 統合レビュー（14番）で検出された矛盾が全件裁定済み（裁定結果が各docに反映済み）
 3. **A7 Red Team の判定が APPROVED または CONDITIONAL（条件全消化）**である — それまでコード実装禁止
 4. オーナー承認10点セット（顧客Journey / 日本側Task / 中国側Task / Project DNA / Task Generator / Gate / Quality Tier / ERD / 権限 / Automation Matrix）が承認済み
@@ -310,3 +310,4 @@ UI上の全専門用語 / 顧客向け説明文 / Workflow説明 / Dashboard表�
 | v2.0 | 2026-08-10 | オーナー指示による最上位制約の追加: §13 Category-Agnostic 2層アーキテクチャ（Universal Core / Category Rule Pack、属性タグレジストリ、未知カテゴリー対応、タンブラー等をテストケースへ降格）、§14 言語設計ルール（日本語補足必須フォーマット、Tooltip/レベル別説明UI前提）、§0に最上位目的を明文化、DoDに8・9項を追加、A8/A9成果物（18・19番）を割当。旧§12はDoD→§15へ改番 |
 | v2.1 | 2026-08-10 | A8/A9のGovernance変更提案5件を全件採用: Rule Pack ID `RP-{NNN}`（A8①）、RulePack Status enum（A8②）、19番辞書40語の正準扱い（A9①）、表示層の日本語主・英語従原則（A9②）、略語衝突時フル表記義務（A9③）。あわせてIR-13を裁定: Automation A+B比率のDoD集計単位は「日本側+中国側の全Task合算」と定義（未達の場合は無理な再分類をせずA7/オーナー判断事項として記録） |
 | v2.2 | 2026-08-10 | A3/A4のGovernance変更提案8件を全件採用: SpecVersion・PO・Sample実体・Shipment・Complaint進行・CAPAの各Status enum（A3①〜⑤）、TYPEコード`CLM`（A4①）、Soft Gate G-16 未実証Claim表現（A4②）、Glossary 2語 Claim/DUPRO（A4③、19番辞書への追補はA7後の最終整合パスで実施） |
+| v2.3 | 2026-08-10 | A7条件C-05の起案によるDoD-1範囲改訂: §15-1の対象を`10〜17`から`10〜19`へ拡大（v2.0で18・19を追加した際にDoD範囲が未更新だった欠陥の是正=RT-04）。他の変更なし。19番辞書へのClaim/DUPRO追補（v2.2予告分）は19番v0.2で実施済み |

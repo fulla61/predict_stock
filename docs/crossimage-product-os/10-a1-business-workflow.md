@@ -3,10 +3,10 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| 版 | v0.3 |
+| 版 | v0.4 |
 | 日付 | 2026-08-10 |
 | 作成 | A1 業務設計エージェント（Business Process Architect） |
-| 準拠 | 05-governance-pack.md v1.1（用語・ID・Status・Task定義15項目・Gate・DNAに完全準拠。G-14/G-15はv1.1裁定を反映済み） |
+| 準拠 | 05-governance-pack.md v2.2（用語・ID・Status・Task定義15項目・Gate・DNAに完全準拠。G-14/G-15はv1.1裁定、G-16はv2.2裁定を反映済み） |
 | 依存 | 01-architecture-overview.md / 並行成果物: 11(A2), 12(A5), 13(A6)。related_tables のテーブル名は A3(15番)確定後に統合レビューで整合させる |
 
 ## 0. 設計原則（本書全体に適用）
@@ -77,6 +77,7 @@ Workstream割付の原則: LEAD/PROP/FIN/CMP/RPT→COMMERCIAL、REQ/SPEC(仕様)
 | P-47 | LOGISTICS | 出荷書類生成・ブッキング | JP-LOGI-010〜020 | A / B |
 | P-48 | LOGISTICS | ShipmentRelease（出荷承認） | JP-LOGI-030 | C_HUMAN_DECISION |
 | P-49 | LOGISTICS | 通関・納品・完了レポート | JP-LOGI-040〜060 | A_FULL_AUTO |
+| P-50 | QUALITY | Claim（性能主張）候補抽出・実証管理 | JP-QUAL-060〜070 | B_AI_DRAFT |
 
 ---
 
@@ -231,7 +232,7 @@ notification: ドラフト完成→SALESへレビュー依頼
 related_docs: [Proposal Export PDF(ドラフト)]
 related_tables: [proposals, projects, requirements]
 automation_class: B_AI_DRAFT
-gates: [G-10, G-12]
+gates: [G-10, G-12, G-16]
 ```
 
 ```yaml
@@ -273,7 +274,7 @@ notification: 顧客閲覧→SALESへ、7日間未閲覧→SALESへフォロー�
 related_docs: [Proposal Export PDF]
 related_tables: [proposals, documents, notifications]
 automation_class: A_FULL_AUTO
-gates: []
+gates: [G-16]
 ```
 
 ```yaml
@@ -537,8 +538,8 @@ Slice内訳: 20 Task = A:9 / B:6 / C:5 / D:0（A+B=75%。Cの5件は全て承認
 | JP-SPEC-030 | Enhancement提案掲載 | SYSTEM | SpecField起票完了 | A_FULL_AUTO | [] |
 | JP-SPEC-040 | Specification版発行・承認（V1..Vn） | PM | 主要SpecField=CONFIRMED到達 or ECR承認 | B_AI_DRAFT | [] |
 | JP-SPEC-050 | デザインデータ受領・検証 | PM | 顧客からロゴ/デザイン入稿 | B_AI_DRAFT | [] |
-| JP-SPEC-060 | アートワーク・版下確認 | PM | 工場から版下(印刷校正)受領 | B_AI_DRAFT | [] |
-| JP-SPEC-070 | パッケージ仕様ドラフト | PM | Packaging要求確定 or Q3以上でTier確定 | B_AI_DRAFT | [] |
+| JP-SPEC-060 | アートワーク・版下確認 | PM | 工場から版下(印刷校正)受領 | B_AI_DRAFT | [G-16] |
+| JP-SPEC-070 | パッケージ仕様ドラフト | PM | Packaging要求確定 or Q3以上でTier確定 | B_AI_DRAFT | [G-16] |
 | JP-RFQ-060 | Quote受領・構造化取込（Excel/WeChat→SoT） | SYSTEM | 工場から返信Excel/WeChat要約受信 | A_FULL_AUTO | [] |
 | JP-RFQ-070 | Quote比較表生成 | SYSTEM | 全RFQ先のQuote登録完了 or 期限到達 | A_FULL_AUTO | [] |
 | JP-RFQ-080 | 追加交渉ポイント抽出 | PM | Quote比較表生成完了 | B_AI_DRAFT | [] |
@@ -558,6 +559,8 @@ Slice内訳: 20 Task = A:9 / B:6 / C:5 / D:0（A+B=75%。Cの5件は全て承認
 | JP-QUAL-030 | 品質基準書(QualityStandard)ドラフト生成 | QA | Quality Tier確定 | B_AI_DRAFT | [] |
 | JP-QUAL-040 | 品質⇄コスト影響提示（緩和−X円/強化+Y円） | SYSTEM | 品質基準書ドラフト生成 | A_FULL_AUTO | [] |
 | JP-QUAL-050 | 中国語品質基準書出力指示 | SYSTEM | 品質基準書承認完了 | A_FULL_AUTO | [] |
+| JP-QUAL-060 | Claim（性能主張）候補抽出・登録（→15番claims。詳細§3.1） | QA | Proposal/商品ページ案/版下で性能表現をAI検知 | B_AI_DRAFT | [G-16] |
+| JP-QUAL-070 | Claim実証管理（試験接続・表現確定。詳細§3.1） | QA | Claim登録 or リンク先CTQ/SpecField変更（PENDING差戻し） | B_AI_DRAFT | [G-16] |
 | JP-REG-020 | 必要書類・試験リストドラフト確定 | REG | 法規初期チェックでREVIEW_REQUIRED | B_AI_DRAFT | [G-03] |
 | JP-REG-030 | 試験機関手配・進捗管理 | REG | 試験リスト確定 | B_AI_DRAFT | [G-03] |
 | JP-REG-040 | 法規最終判断・Status確定 | REG | 試験結果・書類受領完了 | C_HUMAN_DECISION | [G-03] |
@@ -574,8 +577,8 @@ Slice内訳: 20 Task = A:9 / B:6 / C:5 / D:0（A+B=75%。Cの5件は全て承認
 | JP-INSP-020 | 検品指示書（中国語）出力指示 | SYSTEM | 検品計画承認完了 | A_FULL_AUTO | [] |
 | JP-INSP-030 | 検品結果取込・構造化 | SYSTEM | 検品報告(Excel/WeChat)受信 | A_FULL_AUTO | [G-05] |
 | JP-INSP-040 | 検品合否判定ドラフト・FAIL対応起票 | QA | 検品結果取込完了 | B_AI_DRAFT | [G-04, G-05] |
-| JP-LOGI-010 | 出荷書類生成（インボイス（INV：商業送り状）/ パッキングリスト（P/L：梱包明細書）等・定型） | SYSTEM | ShipmentRelease承認 | A_FULL_AUTO | [] |
-| JP-LOGI-020 | ブッキング・輸送手配 | TRADE | 出荷予定確定 | B_AI_DRAFT | [] |
+| JP-LOGI-010 | 出荷書類生成（インボイス（INV：商業送り状）/ パッキングリスト（P/L：梱包明細書）等・定型） | SYSTEM | 出荷予定確定（**ドラフト先行生成**）→ShipmentRelease承認で確定版出力（RT-08是正） | A_FULL_AUTO | [] |
+| JP-LOGI-020 | ブッキング・輸送手配（**暫定ブッキング先行可**） | TRADE | 出荷予定確定（検品・Release承認を待たず暫定ブッキング可。RT-08是正） | B_AI_DRAFT | [] |
 | JP-LOGI-030 | ShipmentRelease（出荷承認） | MGR | 検品PASS+Critical Issue無し+Regulatory充足 | C_HUMAN_DECISION | [G-03, G-04, G-05, G-06] |
 | JP-LOGI-040 | 通関進捗トラッキング | SYSTEM | 出荷実行 | A_FULL_AUTO | [] |
 | JP-LOGI-050 | 納品確認・配送完了処理 | SYSTEM | 国内配送完了通知受信 | A_FULL_AUTO | [] |
@@ -597,6 +600,54 @@ Slice内訳: 20 Task = A:9 / B:6 / C:5 / D:0（A+B=75%。Cの5件は全て承認
 | JP-RPT-040 | Repeat発注承認 | SALES | Repeat見積受領+顧客合意 | C_HUMAN_DECISION | [G-01] |
 
 注: 仕様変更ありのRepeatはJP-REQ-050（差分解析）経由で通常フローの該当Taskのみを再生成する（§4 R-04）。
+
+注（v0.4・C-03/RT-03是正）: JP-FIN-010（受注確認・注文請書発行）およびJP-RPT-040（Repeat発注承認）のoutputsは**顧客受注レコード（15番 `sales_orders`）+ 注文請書Document**であり、G-01「正式発注なし」の判定参照先は「`sales_orders`確定（status=APPROVED∧顧客合意証跡FK）∧ PO=APPROVED以上」（15番§4.1の宣言的条件）である。確定見積（`is_provisional=false`のQuotation）に紐づかない受注登録はDB制約で拒否される（概算価格の確定視=TC-02系の防御）。
+
+注（v0.4・C-09/RT-08是正・物流順序）: JP-LOGI-020は出荷予定確定時点での**暫定ブッキング**（キャンセル可能条件）を許可し、JP-LOGI-010は出荷書類**ドラフトを先行生成**する。ShipmentRelease（JP-LOGI-030、G-03〜G-06）が物理的に停止するのは**船積み実行**（15番§3.10のRELEASED→SHIPPED遷移）であり、暫定ブッキング・書類ドラフト生成は停止対象外。確定版書類・ブッキング確定はRELEASED遷移の副作用として生成する（15番§3.10と整合確認済み）。船腹確保の実務（ブッキングは出荷2〜3週前）と検品→Release承認の直列待ちを分離し、船を逃す構造を解消する。
+
+### 3.1 Claim管理Task定義票（v0.4追加・15項目完全形。C-04/RT-06是正）
+
+```yaml
+task_id: JP-QUAL-060
+name: Claim（性能主張）候補抽出・登録
+purpose: 顧客向け表現（Proposal・商品ページ案・パッケージ版下）から性能主張を自動抽出しClaim Ledger（15番claims）へ登録する。宙に浮いた約束を構造的になくす（16番§7.1）
+owner_role: QA
+trigger: Proposalドラフト生成（JP-PROP-020）・商品ページ文言登録・版下受領（JP-SPEC-060/070）で性能表現をAIが検知
+inputs: [Proposal/商品ページ案/版下の文言, SpecField一式, Rule Pack CtqList/TestPlanView]
+system_action: claimsレコード起票（{ProjectID}-CLM-{NN}採番）、linked_spec_field/required_tests候補の自動接続、G-16評価入力の更新
+ai_action: 性能表現の抽出・Claim候補化、対応CTQ・試験の候補提示、工場非承諾（factory_acknowledgement=false）との矛盾検知（即時WARN）
+human_action: 候補の確認・接続先（CTQ/試験）の確定（実証判定はJP-QUAL-070）
+outputs: [Claim(PENDING)]
+approval_required: true（QA。接続確定）
+blocking_condition: none（G-16はSOFT: 未実証でも「実証予定」注記付きで進行可）
+deadline_rule: trigger+1営業日
+notification: Claim候補検出→QA/SALESへ、工場非承諾との矛盾検知→QA/REGへ即時
+related_docs: [none]
+related_tables: [claims, proposals, spec_fields]
+automation_class: B_AI_DRAFT
+gates: [G-16]
+```
+
+```yaml
+task_id: JP-QUAL-070
+name: Claim実証管理（試験接続・表現確定）
+purpose: Claimの実証（試験合格+REG確認）を管理し、実証レベルに応じた許容表現（allowed_expressions）を確定する。量産用版下承認（印刷発注）前の実証完了を担保する（16番§7.1-4）
+owner_role: QA
+trigger: Claim登録（JP-QUAL-060）完了、またはリンク先CTQ選択肢・SpecField変更によるPENDING差戻し（15番§3.15）
+inputs: [Claim(PENDING), 試験成績書Document, Regulatory Assessment, 工場承諾記録（RFQ回答・仕様書签回）]
+system_action: evidence_status遷移の記録（Approval FK必須）、試験成績書のDocument接続（景品表示法の合理的根拠資料）、REJECTED確定時の当該表現の自動除外
+ai_action: 試験結果とClaim文言の適合判定ドラフト、条件付き表現（「（条件）で（結果）」形式）の生成案
+human_action: 実証判定（APPROVED/CONDITIONAL/REJECTED。REG確認を含む）
+outputs: [Claim(判定済), allowed/forbidden_expressions確定]
+approval_required: true（QA+REG。evidence_approval_id）
+blocking_condition: 量産用版下承認（印刷発注）時点で未実証Claimが残存（運用はG-04系Critical Issue化で担保=05 §9 G-16行）
+deadline_rule: 版下承認予定日-5営業日
+notification: 実証失敗確定→SALES/QA/REGへ即時（表現差替え）、版下承認接近で未実証残→PM/MGRへ
+related_docs: [試験成績書, 版下チェックリスト]
+related_tables: [claims, approvals, documents]
+automation_class: B_AI_DRAFT
+gates: [G-16]
+```
 
 ---
 
@@ -655,7 +706,7 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 
 ## 6. Automation Matrix 集計
 
-対象: 本書で定義した日本側テンプレートTask全89件（§2の20件 + §3の69件）。
+対象: 本書で定義した日本側テンプレートTask全91件（§2の20件 + §3の71件。v0.4でJP-QUAL-060/070〔Claim管理・C-04〕を追加）。
 
 | 領域 | A_FULL_AUTO | B_AI_DRAFT | C_HUMAN_DECISION | D_MANUAL_EXCEPTION | 計 |
 |---|---|---|---|---|---|
@@ -666,7 +717,7 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 | RFQ | 5 | 2 | 1 | 0 | 8 |
 | FACT | 1 | 2 | 2 | 0 | 5 |
 | SMP | 4 | 3 | 1 | 0 | 8 |
-| QUAL | 2 | 2 | 1 | 0 | 5 |
+| QUAL | 2 | 4 | 1 | 0 | 7 |
 | REG | 0 | 4 | 1 | 0 | 5 |
 | PROD | 4 | 2 | 2 | 0 | 8 |
 | INSP | 2 | 2 | 0 | 0 | 4 |
@@ -674,9 +725,9 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 | FIN | 4 | 1 | 0 | 0 | 5 |
 | CMP | 1 | 3 | 0 | 2 | 6 |
 | RPT | 3 | 0 | 1 | 0 | 4 |
-| **合計** | **40 (44.9%)** | **32 (36.0%)** | **15 (16.9%)** | **2 (2.2%)** | **89** |
+| **合計** | **40 (44.0%)** | **34 (37.4%)** | **15 (16.5%)** | **2 (2.2%)** | **91** |
 
-- **A+B = 72/89 = 80.9% ≥ 80%（達成）**
+- **A+B = 74/91 = 81.3% ≥ 80%（達成）**。日中全Task合算（IR-13裁定の正式集計単位・14番）では A+B = (74+28)/(91+35) = **102/126 = 81.0% ≥ 80%**（14番IR-13の100/124=80.6%は本書v0.3時点の値。v0.4のClaim管理2Task〔B_AI_DRAFT〕追加後も基準維持を確認=C-04の再集計）
 - C分類15件は全て「承認・重要判断」（Proposal/RFQ/PO承認、DNA・Requirement・Tier確定、工場選定、GoldenSample・ECR・Repeat発注承認、法規最終判断、ShipmentRelease、商談・価格交渉）であり、設計原則「人間は営業・提案・重要判断・承認のみ」に合致。D分類2件は市場事故・重大クレームのみ。
 - 翻訳・リマインド・転記・進捗確認・定型文書は全件A（またはB）に分類済み。C/Dに定型作業は含まれない。
 - Vertical Slice単体ではA+B=75%（承認密度が最も高い商流上流のため）。案件ライフサイクル全体で80%超となる構造。初期運用で全件承認としているB/C（JP-REQ-020送信承認、JP-PROP-030全件承認等）は、運用実績蓄積後に自動化率を引き上げる（Translation/Doc Engineの「初回テンプレ承認、以降自動」と同方針）。
@@ -685,7 +736,7 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 
 ## 7. Gate参照の整合
 
-本書の各Taskの `gates` はGovernance Pack §9 のv1.1レジストリ（G-01〜G-06, G-10〜G-15）のみを参照している。G-14/G-15は統合レビュー（14番）採用裁定を反映して該当Taskへ追記済み。参照マップ:
+本書の各Taskの `gates` はGovernance Pack §9 のv2.2レジストリ（G-01〜G-06, G-10〜G-16）のみを参照している。G-14/G-15はv1.1裁定、G-16はv2.2裁定（A4提案・C-04でTask配線）を反映して該当Taskへ追記済み。参照マップ:
 
 | Gate | 参照Task |
 |---|---|
@@ -701,6 +752,7 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 | G-13 | JP-LEAD-020/030, JP-RFQ-010/020/030, JP-RPT-030 |
 | G-14 | JP-RFQ-030（RFQ発行）, JP-PROP-070（Quotation送信） |
 | G-15 | JP-PROP-060（Quotation承認） |
+| G-16 | JP-PROP-020/040（Proposal生成・送信）, JP-SPEC-060/070（版下・パッケージ）, JP-QUAL-060/070（Claim抽出・実証管理） |
 
 ---
 
@@ -718,3 +770,4 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 | v0.1 | 2026-08-10 | 初版Draft（A1）。全体マップ49プロセス、Vertical Slice 20Task（15項目完全形）、その他69Task、Task Generator 14ルール、NBA 15ルール、Automation Matrix A+B=80.9%、Governance変更提案2件 |
 | v0.2 | 2026-08-10 | 統合レビュー（14番）反映。G-14/G-15正式採用に伴うgates追記（JP-RFQ-030 / JP-PROP-060 / JP-PROP-070）、§7 Gate参照マップをv1.1レジストリへ更新、JP-REG-010のRegulatory遷移記述をA6 §1.5と整合（IR-09）、Status=Reviewed |
 | v0.3 | 2026-08-10 | 是正パス（Governance v2.1）反映。§14言語ルール是正4件（19番§5 #12〜#15: JP-REQ-030/JP-SPEC-010通知文言・JP-RFQ-020承認画面表示規則・JP-LOGI-010帳票名の日本語主表記）、Category-Agnostic注記追加（冒頭・§2）、Task Generator/JP-SPEC-010へのRule Pack供給参照（18番§8.1）。C分類15件の再点検で再分類なし（IR-13裁定・14番参照） |
+| v0.4 | 2026-08-10 | 是正パス（A7条件消化）反映。C-04: G-16のTask配線（JP-PROP-020/040・JP-SPEC-060/070へgates追記、JP-QUAL-060/070を15項目完全形で新設=§3.1、§7参照マップv2.2化、Automation Matrix再集計 A+B=74/91=81.3%・日中合算102/126=81.0%で基準維持）。C-03: JP-FIN-010/JP-RPT-040のoutputsをsales_orders（15番）へ接続（§3注記）。C-09: JP-LOGI-010/020を書類ドラフト先行生成・暫定ブッキング先行可へ変更しShipmentReleaseの停止対象を船積み実行のみと明記（RT-08、§3注記・15番§3.10整合）。準拠をv2.2へ更新 |

@@ -2,11 +2,11 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | Draft |
-| 版 | v0.1 |
+| Status | **Reviewed** |
+| 版 | v0.2 |
 | 日付 | 2026-08-10 |
 | 作成エージェント | A3（DB / ERD Architect） |
-| 準拠 | 05-governance-pack.md v2.1（ID体系§2・Status enum§3・DNA§4・SoT§6・Version§7・Role§8・Gate§9・ハイブリッド運用§11・2層アーキテクチャ§13・言語ルール§14）/ 01-architecture-overview.md / 14-integration-review.md §3（A3引き継ぎ事項・IR-12） / 18-category-rule-packs.md（Rule Packデータモデル） |
+| 準拠 | 05-governance-pack.md v2.2（ID体系§2〔CLM含む〕・Status enum§3・DNA§4・SoT§6・Version§7・Role§8・Gate§9〔G-16含む〕・ハイブリッド運用§11・2層アーキテクチャ§13・言語ルール§14）/ 01-architecture-overview.md / 14-integration-review.md §3（A3引き継ぎ事項・IR-12） / 18-category-rule-packs.md（Rule Packデータモデル） / 17-a7-red-team.md（条件C-02・C-03・C-05・C-09の消化） |
 | 参照 | 10-a1（Task/Gate/承認）/ 11-a2（SpecField Statusマッピング §3.1）/ 12-a5（Excel往復 §2.2/§2.4・Factory Score §7.1）/ 13-a6（Regulatory遷移 §1.5・G-03 §4） |
 
 本書は Universal Core（カテゴリー非依存の共通基盤：Layer 1）と Category Rule Pack（カテゴリールールパック：カテゴリー差を表現する設定データの束、Layer 2）の2層アーキテクチャを支える正準データ設計である。DDL（データ定義言語：CREATE TABLE等のSQL文）全文は実装フェーズ（A7承認後）の成果物とし、本書はテーブル定義表・制約方針・State Machine（状態遷移機：状態とイベントの遷移規則の定義）を確定する。
@@ -18,7 +18,7 @@
 1. **公開ID + サロゲートキー（内部連番キー：外部に見せないDB内部の主キー）の併用**。全テーブルの物理主キーは `id BIGINT`（内部採番・外部非公開）とし、Governance §2 のID体系（`CI-2026-0001` 等）は `public_id` カラムとして別途保持・UNIQUE制約を付す。理由: (a) 公開IDは業務的意味を持ちフォーマット変更リスクがあるため物理FKに使わない、(b) JOIN性能、(c) 公開IDはURL・帳票・WeChat・Excelに露出するため推測困難性は求めない代わり参照整合はサロゲートで担保。
 2. **公開IDの採番は `id_sequences` テーブルで一元管理**し、再利用・欠番詰め直しを構造的に不可能にする（§2.14）。Project配下のDOC通番はProposal PDF等も含めて共有（IR-07裁定: DOC-01=Proposal、DOC-02=产品规格书）。
 3. **カテゴリー固有カラムの禁止**（Governance §13）。仕様・CTQ（重要品質特性：品質判断の重要基準）・試験項目・検品項目は全て**動的な行**（`spec_fields` / `rule_records` 由来のデータ行）として持ち、「保温性能カラム」「容量カラム」のようなカテゴリー固有の物理カラムをLayer 1スキーマに一切作らない（§8で完全規定）。
-4. **enumはGovernance §3 の正準値のみ**。DB上は CHECK制約（値域制約：許可値以外の登録を拒否するDB制約）または参照テーブルで強制する。本書で新たに必要となったStatusは末尾§9「Governance変更提案」として起案し、裁定まで実装対象にしない。
+4. **enumはGovernance §3 の正準値のみ**。DB上は CHECK制約（値域制約：許可値以外の登録を拒否するDB制約）または参照テーブルで強制する。本書で新たに必要となったStatusは末尾§9「Governance変更提案」として起案し、**5件全てが05 v2.2で採用済み**（§9参照）。
 5. **追記専用（append-only：既存行の更新・削除をせず行追加のみで履歴を残す方式）**を `audit_logs` / `approvals`（判定後）/ 承認済み版レコード（Specification版・GoldenSample・RulePack版・Quote等）に適用。削除は Soft Delete（論理削除：`deleted_at` 印付けのみで物理削除しない）を基本とし、**承認履歴（approvals）と監査ログ（audit_logs）はSoft Deleteすら不可**（`deleted_at` カラム自体を持たない）。
 6. **テーブル名の正準はsnake_case複数形**とする。正準名は本書§2の定義表が唯一の典拠（例: `audit_logs` が正。12番の `audit_log` 表記は統合レビュー方針どおり本書確定後に一括整合）。10番・12番の `related_tables` に登場する名称は本書の正準名へ読み替える（`regulatory_checks`→`regulatory_assessments`、`packaging_specs`→`spec_fields`の包装領域Field、`bom_items`→`spec_fields`のBOM領域Field＋`documents`）。
 7. **HARD Gateの二重防御**（Governance §9）: アプリ層の判定に加え、DB層でもトリガー（DBトリガー：行の変更時に自動実行される検査処理）・CHECK制約・権限剥奪（REVOKE）で物理的に突破不可能にする。承認記録（`approvals`）のFKを持たない遷移をDBが拒否する形で「承認記録なしで突破不可」を実装する。
@@ -51,6 +51,9 @@ erDiagram
     quotes }o--|| factories : "from"
     projects ||--o{ quotations : "client quote"
     quotations }o--o{ quotes : "based on (G-15)"
+    projects ||--o{ sales_orders : "client order (G-01)"
+    sales_orders }o--|| quotations : "agrees to (non-provisional)"
+    projects ||--o{ claims : "CLM performance claims (G-16)"
 ```
 
 ### 1.2 Layer 1: 品質・生産・物流・アフター
@@ -199,6 +202,7 @@ erDiagram
 | quality_profiles | — | project_id, tier(Q1〜Q4), client_choice_label(コスト重視/標準/ブランド重視/プレミアム), tier_approval_id, fixed_minimum_ack bool | projects, approvals | project_id UNIQUE。Tier確定はC_HUMAN_DECISION |
 | quality_standards | — | project_id, version_no, status(SpecVersion enum流用※§9提案-1参照), items JSONB(**外観A/B/C面×欠陥種×限度・AQL値等は全て動的行データ**。数値の正は16番A4), approval_id, superseded_by_id | projects, approvals | (project_id, version_no) UNIQUE。承認版凍結（§7） |
 | inspection_plans | — | project_id, quality_standard_id, stage(IPQC/FIRST_ARTICLE/PRE_SHIPMENT), sampling JSONB(AQL/水準/Ac-Re), check_items JSONB(中国語併記・Rule Pack InspectionPlanView由来), frisk_derived_density(FRISK連動: 12番§7.2), approval_id | projects, quality_standards | (project_id, stage, version) UNIQUE |
+| claims | `{ProjectID}-CLM-{NN}` | project_id, claim_text_ja, claim_origin(PROPOSAL/CLIENT_REQ/PRODUCT_PAGE/ARTWORK), linked_spec_field_key, linked_ctq_rule_code(例 `RP-001-CTQ-01`), required_test_rule_codes JSONB, regulatory_constraints JSONB(景表法=合理的根拠資料要件等), evidence_status(**Approval enum流用**: PENDING/APPROVED/REJECTED/CONDITIONAL。APPROVED=試験合格+REG確認), evidence_document_id(試験成績書=景表法合理的根拠資料), evidence_approval_id, factory_acknowledgement(bool・NULL=未確認。false=工場非承諾の明示記録), allowed_expressions_ja JSONB, forbidden_expressions_ja JSONB | projects, documents, approvals | public_id UNIQUE（TYPEコード`CLM`: 05 v2.2採用・A4①）。**Claim Ledger（16番§7.1のスキーマ化・C-02）**。CHECK: `linked_spec_field_key`・`required_test_rule_codes`が空のまま evidence_status=APPROVED 不可（宙に浮いた約束の禁止=16番§7.1-2）。APPROVED遷移はevidence_approval_id必須（トリガー）。G-16評価の参照先（§4.1）。State Machineは§3.15 |
 
 #### golden_samples 詳細（LOCKED後のイミュータブル性）
 
@@ -228,6 +232,7 @@ erDiagram
 
 | テーブル | public_id | 主要カラム | FK | ユニーク/制約 |
 |---|---|---|---|---|
+| sales_orders | 注文請書等の出力物は`{ProjectID}-DOC-{NN}` | project_id, quotation_id(合意対象の顧客見積版), status(**Approval enum流用**: PENDING/APPROVED=受注確定/REJECTED/CONDITIONAL), client_agreement_document_id(顧客合意証跡: 注文書・注文請書签回・Portal承諾記録), order_approval_id(JP-FIN-010/JP-RPT-040の受注Approval), amount, currency, quantity, confirmed_at | projects, quotations, documents, approvals | **顧客受注エンティティ=G-01「正式発注なし」の判定参照先（C-03）**。TYPEコードは新設せず出力物（注文請書）はDOC通番。CHECK: 参照quotationは`is_provisional=false`のみ（概算見積のままの受注確定登録を拒否=TC-02系・RT-03）。APPROVED遷移は`client_agreement_document_id`+`order_approval_id`必須（トリガー） |
 | pos | `{ProjectID}-PO-{NN}` | project_id, factory_id, spec_version_id, quantity, amount, currency, incoterms, payment_milestones JSONB, status(**§9提案-2**), issue_approval_id, factory_confirm_document_id | projects, factories, spec_versions, approvals | public_id UNIQUE。**発行時トリガー: 参照spec_versionsの status='APPROVED' でなければISSUED遷移拒否**（IR-12のDB防御・G-01/G-02系） |
 | production_lots | `{ProjectID}-LOT-{NN}` | po_id, status(**Production enum: MATERIAL_PREP〜READY_TO_SHIP**), quantity, planned/actual milestone dates JSONB(P10..P100), first_article_inspection_id | pos, inspections | public_id UNIQUE。PILOT→P10は首件检验合格FK必須（CHECK） |
 | inspections | `{ProjectID}-INS-{NN}` | project_id, lot_id, plan_id, stage(IPQC/FIRST_ARTICLE/PRE_SHIPMENT), result(**Approval enumを流用**: PENDING=未判定/APPROVED=合格/REJECTED=不合格/CONDITIONAL=特採※MGR承認必須), sample_size, defect_summary JSONB, report_document_id, inspector_role, result_approval_id | projects, production_lots, inspection_plans, documents, approvals | public_id UNIQUE。**再検査は新行**（結果の上書き禁止）。REJECTED未処理でG-05 |
@@ -325,9 +330,9 @@ erDiagram
 
 | テーブル | 主要カラム | 制約 |
 |---|---|---|
-| id_sequences | scope_type(PROJECT/FACTORY/GLOBAL), scope_id, type_code(RFQ/QT/QO/SMP/GS/ECR/PO/LOT/INS/SHP/CMP/CAPA/DOC/TSK/AUD…), last_no | (scope_type, scope_id, type_code) UNIQUE。**単調増加のみ**（採番関数は `last_no+1` の返却しかできない＝再利用・欠番詰め直しの構造的禁止。Governance §2） |
+| id_sequences | scope_type(PROJECT/FACTORY/GLOBAL), scope_id, type_code(RFQ/QT/QO/SMP/GS/ECR/PO/LOT/INS/SHP/CMP/CAPA/DOC/**CLM**/TSK/AUD…), last_no | (scope_type, scope_id, type_code) UNIQUE。**単調増加のみ**（採番関数は `last_no+1` の返却しかできない＝再利用・欠番詰め直しの構造的禁止。Governance §2。CLMはv2.2採用TYPEコード=C-02） |
 
-**テーブル数: 62**（ビュー・パーティションを除く）。
+**テーブル数: 64**（ビュー・パーティションを除く。v0.2で `claims`〔C-02〕・`sales_orders`〔C-03〕を追加）。
 
 ---
 
@@ -409,7 +414,7 @@ erDiagram
 
 | 状態 | イベント | 遷移先 | ガード | 副作用 |
 |---|---|---|---|---|
-| DRAFT | PO承認（JP-PROD-020） | APPROVED | MGR Approval + **G-01（顧客正式発注あり）+ G-02（GS=LOCKED）+ G-03（Regulatory=APPROVED/NOT_APPLICABLE）** + spec_version=APPROVED | — |
+| DRAFT | PO承認（JP-PROD-020） | APPROVED | MGR Approval + **G-01（顧客正式発注あり＝当該Projectの`sales_orders`確定〔status=APPROVED∧合意証跡FK〕: §2.7・C-03）+ G-02（GS=LOCKED）+ G-03（Regulatory=APPROVED/NOT_APPLICABLE）** + spec_version=APPROVED | — |
 | APPROVED | 発行（工場送付） | ISSUED | Approval存在をトリガー検証 | Excel出力（APPROVED透かし）、支払マイルストーン生成 |
 | ISSUED | 工場受諾（盖章签回） | FACTORY_CONFIRMED | factory_confirm_document_id | production_lots起票、生产前确认（CN-PROD-010）Task起動 |
 | FACTORY_CONFIRMED | 全Lot出荷・支払完了 | COMPLETED | — | Profitability確定集計 |
@@ -440,7 +445,7 @@ erDiagram
 | 状態 | イベント | 遷移先 | ガード | 副作用 |
 |---|---|---|---|---|
 | PREPARING | 出荷承認申請（CN-LOGI-030） | RELEASE_REQUESTED | Lot=READY_TO_SHIP | MGRへ承認要求（N-13） |
-| RELEASE_REQUESTED | ShipmentRelease承認（JP-LOGI-030） | RELEASED | **release_approval_id必須 + G-03/G-04/G-05/G-06全PASS**をトリガー検証。**Portal上のApprovalのみ有効**（Excel/WeChatの「同意」は無効） | 出荷書類生成（JP-LOGI-010）、ブッキング確定 |
+| RELEASE_REQUESTED | ShipmentRelease承認（JP-LOGI-030） | RELEASED | **release_approval_id必須 + G-03/G-04/G-05/G-06全PASS**をトリガー検証。**Portal上のApprovalのみ有効**（Excel/WeChatの「同意」は無効） | 出荷書類**確定版**生成（JP-LOGI-010。ドラフトは出荷予定確定時点で先行生成可=RT-08是正/C-09）、ブッキング確定（**暫定ブッキングはPREPARING中から可**: 10番 JP-LOGI-020 v0.4。Releaseが物理的に止めるのは次行の船積み実行のみ） |
 | RELEASED | 船積み実行（装柜監督記録） | SHIPPED | 装柜写真document | 通関トラッキング開始 |
 | SHIPPED | 到着 | ARRIVED | — | imports処理（食品接触案件は輸入届出ガード: §2.7） |
 | ARRIVED | 国内配送完了 | DELIVERED | deliveries登録 | 納品完了レポート送信、入金マイルストーン |
@@ -486,13 +491,22 @@ erDiagram
 | REVIEW_REQUIRED | 差戻し | DRAFT | 理由必須 | — |
 | APPROVED | 新版APPROVED | SUPERSEDED | — | 案件の evaluated_against は旧版記録のまま保持（監査再現性） |
 
-**State Machine数: 14**（Project / SpecField / Specification版 / Sample / GoldenSample / ECR / PO / ProductionLot / Inspection / Shipment / Complaint / CAPA / Regulatory / RulePack）。
+### 3.15 Claim（evidence_status: Approval enum流用＝新設なし。C-02）
+
+| 状態 | イベント | 遷移先 | ガード | 副作用 |
+|---|---|---|---|---|
+| PENDING | 実証確定（required_tests全合格+REG確認） | APPROVED | `linked_spec_field_key`・`required_test_rule_codes`接続済み + evidence_approval_id + 試験成績書document | allowed_expressionsの使用解禁、G-16 WARN解消 |
+| PENDING | 条件付き実証（試験条件付き表現のみ許可） | CONDITIONAL | evidence_approval_id + 条件記録 | 「（条件）で（結果）」形式の表現のみ使用可（16番§7.3-2） |
+| PENDING | 実証失敗確定 / 工場非承諾確定（factory_acknowledgement=false） | REJECTED | 理由必須 | 顧客向け表現から自動除外（16番§7.3-3）。**確定後の当該表現使用はG-04系Critical Issueへ昇格**（05 §9 G-16行） |
+| APPROVED / CONDITIONAL / REJECTED | リンク先CTQ選択肢・SpecField変更 | PENDING（差戻し） | SYSTEM自動 | 顧客向け表現の再確認Task生成（16番§7.1-5、JP-QUAL-070再起動） |
+
+**State Machine数: 15**（Project / SpecField / Specification版 / Sample / GoldenSample / ECR / PO / ProductionLot / Inspection / Shipment / Complaint / CAPA / Regulatory / RulePack / Claim）。
 
 ---
 
 ## 4. Gate評価のデータ設計
 
-### 4.1 gate_definitions（G-01〜G-15をデータとして保持）
+### 4.1 gate_definitions（G-01〜G-16をデータとして保持）
 
 Gate Engine（Layer 1）はGateをコードに埋め込まず、本テーブルの宣言的定義を評価する。条件式はRule PackのDSLと同じホワイトリスト原則（参照できるのはエンティティのStatus・Approval存在・件数比較のみ）。
 
@@ -508,7 +522,11 @@ Gate Engine（Layer 1）はGateをコードに埋め込まず、本テーブル�
 | warn_message_ja | SOFT通過時のWARN文言キー（19番Glossary連携。G-14は未知カテゴリー時の追加文言フラグ: 18番§6） |
 | version / effective_from | Gate定義の版管理（追加・変更はGovernance §9追記が前提） |
 
-初期データ15行 = Governance §9レジストリ（G-01〜G-06, G-10〜G-15）をそのまま格納。**Gateの新設はGovernance変更手続＋本テーブルへの行追加**であり、コード変更を要しない。
+初期データ16行 = Governance §9レジストリ（G-01〜G-06, G-10〜G-16）をそのまま格納。**Gateの新設はGovernance変更手続＋本テーブルへの行追加**であり、コード変更を要しない。
+
+**G-01の宣言的条件（C-03）**: 「正式発注なし」の判定は **「当該Projectの`sales_orders`=確定（status='APPROVED' ∧ client_agreement_document_id NOT NULL）かつ `pos`=APPROVED以上」** の否定で評価する（条件例: `{all_of:[{subject:"sales_orders", scope:"project", field:"status", op:"=", value:"APPROVED"},{subject:"pos", scope:"project", field:"status", op:">=", value:"APPROVED"}]}` の不成立→BLOCK）。工場向けPO Statusのみを参照する評価は禁止＝**顧客受注ゼロのまま社内がPOを起こして量産開始できる経路を排除**する。JP-FIN-010/JP-RPT-040のoutputsが`sales_orders`に接続する（10番 v0.4）。
+
+**G-16行（v2.2採用・C-02）**: `gate_type=SOFT / checkpoint_actions=["proposal.send","product_page.publish","artwork.approve"] / condition={subject:"claims", scope:"project", field:"evidence_status", op:"!=", value:"APPROVED"}（または factory_acknowledgement=false と矛盾する表現の併存: §2.5 claims表参照） / override=WARN付き進行可（未実証表現へ「実証予定」注記を強制）`。実証失敗確定表現の使用はG-04系Critical Issueへ昇格（§3.15）。
 
 ### 4.2 gate_evaluations（判定履歴）
 
@@ -522,7 +540,7 @@ Gate Engine（Layer 1）はGateをコードに埋め込まず、本テーブル�
 |---|---|---|
 | RFQ_READY | RFQ必須SpecField（Rule Pack QuestionListのdisplay_stage=RFQ・BLOCKER対応Field）にUNKNOWNなし / RFQ先工場≥1 / ※G-11/G-12/G-13/G-14はWARNのみ（false化しない） | 「数量が未確定です（概算値で進行可能）」「法規チェック未着手（G-14 WARN）」 |
 | SAMPLE_READY | 仕様の主要FieldがPROVISIONAL以上 / 工場選定済み / Regulatory≠BLOCKED（BLOCKEDは✕。13番§4.2） | 「Regulatory: BLOCKED（是正待ち）」 |
-| PRODUCTION_READY | **G-01: 顧客正式発注あり** / **G-02: 最新GoldenSample=LOCKED** / **G-03系: Regulatory ∈ {APPROVED, NOT_APPLICABLE}** / **Specification現行版=APPROVED（IR-12）** / PO承認済み | 「Regulatory: CHECKING（再確認中のため量産開始不可）」「仕様書が承認されていません」 |
+| PRODUCTION_READY | **G-01: 顧客正式発注あり（`sales_orders`確定=status APPROVED∧合意証跡FK。§4.1）** / **G-02: 最新GoldenSample=LOCKED** / **G-03系: Regulatory ∈ {APPROVED, NOT_APPLICABLE}** / **Specification現行版=APPROVED（IR-12）** / PO承認済み | 「Regulatory: CHECKING（再確認中のため量産開始不可）」「仕様書が承認されていません」 |
 | SHIPMENT_READY | Regulatory ∈ {APPROVED, NOT_APPLICABLE} / **G-04: Critical Issue=0** / **G-05: 出货检验=APPROVED（REJECTED未処理なし）** / **G-06: 無断変更疑義なし（未解決ECRなし）** | 「出荷検品が不合格のままです（返工後の再検品待ち）」 |
 
 - 不足理由リストは `missing_reasons` JSONBに「日本語文言キー + 対象エンティティ参照」で格納し、表示層が19番Glossaryで平易文に展開する（内部Status名を顧客に生で見せない: 11番§7準拠）。
@@ -601,9 +619,11 @@ Gate Engine（Layer 1）はGateをコードに埋め込まず、本テーブル�
 
 ---
 
-## 9. Governance変更提案（5件・未裁定）
+## 9. Governance変更提案（5件）→ 裁定済み（05 v2.2で全件採用）
 
-Governance §3「Status新設禁止・提案制」に基づく起案。裁定までは実装対象にしない。既存enumの流用で足りるものは新設していない（Inspection判定=Approval enum流用、属性・DNA確定=SpecField enum部分流用、教育文言=Approval enum流用〔A2②裁定踏襲〕、品質基準書版=提案-1のenum流用）。
+> 本節の5件は**全て採用**され、Governance Pack v2.2 §3 に正式登録された（A3①〜⑤: SpecVersion / PO / Sample実体 / Shipment / Complaint進行・CAPA。05 v2.2 Change Log参照）。本書中の「§9提案-n」参照は**正準enum参照**として読むこと（RT-05是正・C-05）。
+
+Governance §3「Status新設禁止・提案制」に基づく起案（起案時の記録として保持）。既存enumの流用で足りるものは新設していない（Inspection判定=Approval enum流用、属性・DNA確定=SpecField enum部分流用、教育文言=Approval enum流用〔A2②裁定踏襲〕、品質基準書版=提案-1のenum流用、Claim evidence_status・sales_orders status=Approval enum流用〔v0.2追加分。新設なし〕）。
 
 ### 提案-1: Specification版 Status enum（IR-12解決に必要）
 
@@ -654,3 +674,4 @@ Governance §3「Status新設禁止・提案制」に基づく起案。裁定ま
 | 版 | 日付 | 変更 |
 |---|---|---|
 | v0.1 | 2026-08-10 | 初版作成（A3）。ERD4面 / テーブル定義62表（公開ID+サロゲートキー方針、spec_fields・golden_samples・approvals・audit_logs・documents・Rule Pack層・RBAC遮断の詳細設計）/ State Machine 14本（IR-12裁定: 产品规格书は単一版系列のDRAFT→APPROVED遷移、RFQはDRAFT添付可・量産はAPPROVED版必須をDB制約化）/ Gate定義のデータ化とReadiness導出 / File・Version管理（「最新版」ファイル名のCHECK禁止）/ Audit Architecture（ハッシュチェーン+WORMアンカー）/ カテゴリー固有カラム禁止の規約 / Governance変更提案5件 |
+| v0.2 | 2026-08-10 | 是正パス（A7条件消化）反映。C-02: `claims`表追加（Claim Ledger=16番§7.1のスキーマ化）・gate_definitions初期データ16行化（G-16行）・id_sequencesへCLM追加・Claim State Machine追加（§3.15、計15本）。C-03: `sales_orders`（顧客受注）追加とG-01宣言的条件の定義（§4.1/§4.3/§3.7、確定見積のみ参照可CHECK）。C-05: §9の5提案を「05 v2.2採用済み」へ更新。C-09: §3.10のRELEASED副作用を暫定ブッキング先行・書類ドラフト先行生成と整合（RT-08）。テーブル数62→64。準拠をv2.2へ更新、Status=Reviewed（DoD-1対応） |

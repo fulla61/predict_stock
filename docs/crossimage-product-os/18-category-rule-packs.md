@@ -2,11 +2,11 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | Draft |
-| 版 | v0.1 |
+| Status | **Reviewed** |
+| 版 | v0.2 |
 | 日付 | 2026-08-10 |
 | 作成エージェント | A8 |
-| 準拠 | Governance Pack v2.0（特に §13 Category-Agnostic 2層アーキテクチャ / §14 言語設計ルール / §7 Versionルール） |
+| 準拠 | Governance Pack v2.2（特に §13 Category-Agnostic 2層アーキテクチャ / §14 言語設計ルール / §7 Versionルール。§2 Rule Pack ID・§3 RulePack enumはv2.1採用済み） |
 
 ---
 
@@ -213,8 +213,9 @@ rule_pack:
 
 | 調整対象 | Q1_ESSENTIAL | Q2_STANDARD | Q3_PREMIUM | Q4_LUXURY |
 |---|---|---|---|---|
-| 外観AQL（MAJOR） | 4.0 | 2.5 | 1.5 | 1.0 |
+| 外観AQL（MAJOR） | 4.0 | 2.5 | 1.0 | 0.65 |
 | 外観AQL（MINOR） | 6.5 | 4.0 | 2.5 | 1.5 |
+| 検査水準（抜取数の水準） | 一般検査水準I | 一般検査水準II | 一般検査水準II | 一般検査水準III |
 | CRITICAL不良 | 0（全Tier共通・FIXED MINIMUM） | 0 | 0 | 0 |
 | 外観検査距離/時間 | 60cm/3秒 | 45cm/5秒 | 30cm/5秒 | 30cm/10秒 |
 | 限度見本 | 不要 | 推奨 | 必須 | 必須+A面写真基準 |
@@ -222,7 +223,7 @@ rule_pack:
 | 安全・法規試験 | 全Tier同一（緩和禁止） | 同左 | 同左 | 同左 |
 | 首件・試作量産 | ODM/Risk条件次第 | 同左 | 必須 | 必須 |
 
-※数値は初期既定値の例。正式な外観基準・AQL体系は 16番（A4 Quality設計）を正とし、本Engineは A4 の値をデータとして参照する。
+※数値は初期既定値の例。正式な外観基準・AQL体系は 16番（A4 Quality設計）を正とし、本Engineは A4 の値をデータとして参照する（v0.2で16番§1.2確定値に同期済み: RT-16/C-06是正）。
 
 ### 2.4 Step(d) 矛盾解決（決定表）
 
@@ -759,7 +760,9 @@ Governance §13「未対応カテゴリーのため受付不可という挙動�
 
 ---
 
-## 9. Governance変更提案（2件・未裁定）
+## 9. Governance変更提案（2件）→ 裁定済み（05 v2.1で全件採用）
+
+> 2件とも**採用**され、Governance Pack v2.1 に正式登録された（Rule Pack ID `RP-{NNN}`=A8①→05 §2、RulePack Status enum=A8②→05 §3。05 v2.1 Change Log参照。RT-05是正・C-05）。データ着地は 15番 §2.13（category_rule_packs / rule_pack_versions / rule_records / attribute_rule_sets）で定義済み。本書中の本節参照は正準ID・正準enum参照として読むこと。
 
 ### 提案-1: Rule Pack の ID体系追加（Governance §2 への追記）
 
@@ -787,3 +790,4 @@ Governance §13「未対応カテゴリーのため受付不可という挙動�
 | 版 | 日付 | 変更 |
 |---|---|---|
 | v0.1 | 2026-08-10 | 初版作成（A8）。Rule Packデータモデル（9要素）/ Rule Engine評価パイプライン / 属性13種マッピング表 / 20カテゴリー×10軸比較表 / ウォーターサーバー属性合成デモ（例）/ 未知カテゴリーフロー / 新カテゴリー追加手順 / A1・A2・A6接続仕様 / Governance変更提案2件 |
+| v0.2 | 2026-08-10 | 是正パス（A7条件消化）反映。C-05: §9の2提案を「05 v2.1採用済み」へ更新。C-06: §2.3のAQL数値を16番§1.2確定値へ同期（RT-16: MAJOR Q3/Q4=1.0/0.65、検査水準行を追加）。準拠をv2.2へ更新、Status=Reviewed（DoD-1対応） |
