@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **v2.0 APPROVED（v2.0差分はオーナー指示「Category-Agnostic Core」「言語設計ルール」を最上位制約として反映）** |
+| Status | **v2.1 APPROVED（v2.0差分はオーナー指示「Category-Agnostic Core」「言語設計ルール」を反映。v2.1差分はA8/A9提案の裁定によるもので、オーナー事後確認事項）** |
 | 適用範囲 | Crossimage Product OS に関わる全エージェント（A1〜A7, B1〜B6, C1〜C4, 運用AI Engine）および全設計・実装成果物 |
 | 変更手続 | 本書の変更は秘書AIがChange Logに追記し、オーナー承認後に発効。**各エージェントによる勝手な用語・Status・ID の新設は禁止**（必要時は「Governance変更提案」として成果物末尾に記載し、統合レビューで採否判定） |
 
@@ -78,6 +78,7 @@
 | 業務Taskテンプレート（中国側） | `CN-{領域}-{NNN}`（10刻み） | `CN-RFQ-010` |
 | Task実体（案件生成後） | `{ProjectID}-TSK-{NNNN}` | `CI-2026-0001-TSK-0031` |
 | Factory付帯記録（案件非依存） | `FA-{NNNN}-{TYPE}-{NN}`（TYPE: AUD監査 / DOC資質書類 / CAPA） | `FA-0007-AUD-01`（v1.1追加、A5提案） |
+| Category Rule Pack | `RP-{NNN}` | `RP-001`（v2.1追加、A8提案） |
 | Gate | `G-{NN}` | `G-01` |
 | 領域コード | LEAD/PROP(提案)/REQ(要件)/SPEC/RFQ/FACT(工場)/SMP/QUAL/REG(法規)/PROD/INSP/LOGI/FIN/CMP/RPT(Repeat) | |
 
@@ -104,6 +105,7 @@
 | 顧客心理(内部) | `IDEA / EXCITED / CONVINCED / COMMITTED / ORDERED` |
 | Automation分類 | `A_FULL_AUTO / B_AI_DRAFT / C_HUMAN_DECISION / D_MANUAL_EXCEPTION` |
 | QuestionClass（顧客質問分類） | `BLOCKER / IMPORTANT_LATER / OPTIONAL`（v1.1追加、A2提案） |
+| RulePack | `DRAFT / REVIEW_REQUIRED / APPROVED / SUPERSEDED`（v2.1追加、A8提案） |
 
 ## 4. Project DNA（8軸・正準コード）
 
@@ -270,7 +272,11 @@ Category Rule Pack が存在しない商品が入力された場合: AIが属性
 
 ### 適用範囲
 UI上の全専門用語 / 顧客向け説明文 / Workflow説明 / Dashboard表示 / エラーメッセージ / 工場向け指示文（中国語も同原則: 中文用語+説明）。
-§1 の正準キー（EN）は DB・API・内部識別子専用であり、**表示層に生のまま出してはならない**。表示用の用語辞書（Glossary）は 19番文書で管理する。
+§1 の正準キー（EN）は DB・API・内部識別子専用であり、**表示層に生のまま出してはならない**。表示用の用語辞書（Glossary）は 19番文書で管理し、同辞書収載の40語は §1 に準ずる正準用語として扱う（v2.1、A9提案）。
+
+### 追加原則（v2.1、A9提案）
+- **表示層は日本語主・英語従**: 見出し・ラベルは日本語を主とし、英語用語は括弧内補助に置く（例: 「見積依頼（RFQ）」であり「RFQ（見積依頼）」を主見出しにしない。本文中の初出フォーマットは従来どおり）
+- **略語衝突時のフル表記義務**: 同一略語が複数の意味を持ちうる場合（例: BL＝船荷証券）、初出時は必ずフル表記＋日本語説明とする
 
 ## 15. Phase 0 Definition of Done
 
@@ -293,3 +299,4 @@ UI上の全専門用語 / 顧客向け説明文 / Workflow説明 / Dashboard表�
 | v1.0 | 2026-08-10 | 初版制定（オーナー承認方針: ハイブリッド運用・タンブラーPoC・Vertical Slice・A7承認まで実装禁止 を反映） |
 | v1.1 | 2026-08-10 | 統合レビュー裁定によるGovernance変更提案8件の採否反映。採用6件: QuestionClass enum（A2①）、G-03 Readiness条件明文化（A6②）、G-14新設（A1①+A6①を一本化）、G-15新設（A1②）、Glossary 4語追加（A5①）、Factory付帯記録ID（A5②）。不採用2件: 教育文言ライフサイクルStatus（A2②→既存Approval enum流用）、A6のG-14単独案（A1案と統合）。詳細裁定は 14-integration-review.md |
 | v2.0 | 2026-08-10 | オーナー指示による最上位制約の追加: §13 Category-Agnostic 2層アーキテクチャ（Universal Core / Category Rule Pack、属性タグレジストリ、未知カテゴリー対応、タンブラー等をテストケースへ降格）、§14 言語設計ルール（日本語補足必須フォーマット、Tooltip/レベル別説明UI前提）、§0に最上位目的を明文化、DoDに8・9項を追加、A8/A9成果物（18・19番）を割当。旧§12はDoD→§15へ改番 |
+| v2.1 | 2026-08-10 | A8/A9のGovernance変更提案5件を全件採用: Rule Pack ID `RP-{NNN}`（A8①）、RulePack Status enum（A8②）、19番辞書40語の正準扱い（A9①）、表示層の日本語主・英語従原則（A9②）、略語衝突時フル表記義務（A9③）。あわせてIR-13を裁定: Automation A+B比率のDoD集計単位は「日本側+中国側の全Task合算」と定義（未達の場合は無理な再分類をせずA7/オーナー判断事項として記録） |
