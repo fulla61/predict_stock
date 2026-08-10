@@ -3,13 +3,15 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| 版 | v0.2 |
+| 版 | v0.3 |
 | 日付 | 2026-08-10 |
 | 作成 | A1 業務設計エージェント（Business Process Architect） |
 | 準拠 | 05-governance-pack.md v1.1（用語・ID・Status・Task定義15項目・Gate・DNAに完全準拠。G-14/G-15はv1.1裁定を反映済み） |
 | 依存 | 01-architecture-overview.md / 並行成果物: 11(A2), 12(A5), 13(A6)。related_tables のテーブル名は A3(15番)確定後に統合レビューで整合させる |
 
 ## 0. 設計原則（本書全体に適用）
+
+> 注: 本書中のタンブラー等の具体例（§2のVertical Slice Task定義票を含む）は**テストケース第1号の例であり、システム仕様ではない**（Governance §0-2 / §13）。カテゴリー固有ロジックのハードコードは禁止され、カテゴリー差は Category Rule Pack + 属性タグのデータとして供給される（18番 §8）。
 
 1. **人間の仕事は「営業・提案・重要判断・承認」のみ**。翻訳・リマインド・転記・進捗確認・定型文書は全て `A_FULL_AUTO` または `B_AI_DRAFT`。
 2. **工場との入出力はハイブリッド前提**（Governance §11）。工場向け出力Taskは「中国語Excel生成＋WeChatDigest生成→CN_OFFICE経由送信」を標準動作とし、Portalは閲覧補助。工場からの入力はExcel/WeChat要約の構造化取込（登録時点でSoT昇格）。
@@ -82,6 +84,8 @@ Workstream割付の原則: LEAD/PROP/FIN/CMP/RPT→COMMERCIAL、REQ/SPEC(仕様)
 
 対象Entry Route: A. IDEA MODE、想定DNA初期推定: `EXP_BEGINNER × INT_EXPLORE × ODM_1_LOGO × PRISK_MEDIUM(食品接触) × Q2_STANDARD × BIMP_MEDIUM × FRISK_TRUSTED × CRISK_LOW/PRIO_NORMAL`。
 全20Task。Governance §5 の15項目完全形。実行順は概ね記載順（Task GeneratorがDAGとして生成、並行可のものは並行）。
+
+> ※ 本節のタンブラーは Universal Core + Rule Pack 機構検証用の**テストケース第1号の例であり、タンブラー専用のシステム仕様ではない**（Governance §0-2 / §13）。Task本文中のカテゴリ由来の質問・仕様項目・法規・試験の中身は、Category Rule Pack + 属性タグから供給されるデータである（18番 §8.1）。
 
 ```yaml
 task_id: JP-LEAD-010
@@ -181,7 +185,7 @@ outputs: [Requirement(更新), G-10判定結果]
 approval_required: false
 blocking_condition: none
 deadline_rule: 回答受信+10分（自動処理）
-notification: 全BLOCKER解消→SALESへ「Proposal確定可」通知
+notification: 全BLOCKER解消→SALESへ「必須質問すべて回答済み → 商品提案（Proposal）を確定できます」通知
 related_docs: [none]
 related_tables: [requirements, questions]
 automation_class: A_FULL_AUTO
@@ -299,7 +303,7 @@ name: SpecField起票（Requirement→SpecField変換）
 purpose: 確定Requirementを仕様項目に分解し、Field単位Status付きでSpecificationの骨格を作る
 owner_role: PM
 trigger: JP-REQ-040完了
-inputs: [Requirement(確定版), ProjectDNA, カテゴリ別SpecFieldテンプレート（タンブラー: 容量/材質/表面処理/断熱構造/蓋仕様/印刷・加飾/色(Pantone)/容器包装/食品接触材質明細 等）]
+inputs: [Requirement(確定版), ProjectDNA, カテゴリ別SpecFieldテンプレート（Category Rule Pack + 属性タグから供給されるデータ・18番 §8。例〔テストケース第1号タンブラー〕: 容量/材質/表面処理/断熱構造/蓋仕様/印刷・加飾/色(Pantone)/容器包装/食品接触材質明細 等）]
 system_action: SpecFieldレコード一括起票、各FieldへStatus付与（顧客明言=CONFIRMED、AI補完=AI_SUGGESTED、暫定=PROVISIONAL、不明=UNKNOWN）、Readiness(RFQ_READY)判定開始
 ai_action: Requirement→SpecFieldマッピング、業界標準値による補完提案（根拠付き）
 human_action: 起票結果の確認、AI_SUGGESTED値の妥当性チェック（確定操作は不要、確定は顧客回答・サンプルで段階的に）
@@ -307,7 +311,7 @@ outputs: [SpecField一式(Status付), RFQ_READY判定(不足理由リスト)]
 approval_required: true（PM。AI補完値の採用可否）
 blocking_condition: Requirement未確定
 deadline_rule: trigger+1営業日
-notification: RFQ_READY不足理由→PMへ、起票完了→SALESへ
+notification: 「見積依頼の準備状況（RFQ_READY）: 不足理由○件」→PMへ（通知文面は日本語主+括弧コード）、起票完了→SALESへ
 related_docs: [Specification(ドラフト)]
 related_tables: [specifications, spec_fields, requirements]
 automation_class: B_AI_DRAFT
@@ -426,7 +430,7 @@ purpose: 工場に出す依頼内容（仕様・数量・希望条件・情報�
 owner_role: PM
 trigger: JP-RFQ-010完了
 inputs: [RFQ(ドラフト), SpecField一式, ProjectDNA]
-system_action: Approvalレコード作成（PENDING）、G-11/G-12/G-13の判定結果をWARN表示（SOFT、承認者判断で進行可）
+system_action: Approvalレコード作成（PENDING）、G-11/G-12/G-13の判定結果を承認画面に表示（表示規則: 「注意（WARN）: 色番号（パントン）未確定〔G-11〕」のように日本語名+括弧コードで表示。SOFT、承認者判断で進行可）
 ai_action: 承認観点チェックリスト（PROVISIONAL/UNKNOWN項目一覧、情報遮断スキャン結果、数量シナリオ妥当性）
 human_action: RFQ内容の確認・修正指示または承認
 outputs: [Approval記録, RFQ(承認済)]
@@ -570,7 +574,7 @@ Slice内訳: 20 Task = A:9 / B:6 / C:5 / D:0（A+B=75%。Cの5件は全て承認
 | JP-INSP-020 | 検品指示書（中国語）出力指示 | SYSTEM | 検品計画承認完了 | A_FULL_AUTO | [] |
 | JP-INSP-030 | 検品結果取込・構造化 | SYSTEM | 検品報告(Excel/WeChat)受信 | A_FULL_AUTO | [G-05] |
 | JP-INSP-040 | 検品合否判定ドラフト・FAIL対応起票 | QA | 検品結果取込完了 | B_AI_DRAFT | [G-04, G-05] |
-| JP-LOGI-010 | 出荷書類生成（INV/PL等・定型） | SYSTEM | ShipmentRelease承認 | A_FULL_AUTO | [] |
+| JP-LOGI-010 | 出荷書類生成（インボイス（INV：商業送り状）/ パッキングリスト（P/L：梱包明細書）等・定型） | SYSTEM | ShipmentRelease承認 | A_FULL_AUTO | [] |
 | JP-LOGI-020 | ブッキング・輸送手配 | TRADE | 出荷予定確定 | B_AI_DRAFT | [] |
 | JP-LOGI-030 | ShipmentRelease（出荷承認） | MGR | 検品PASS+Critical Issue無し+Regulatory充足 | C_HUMAN_DECISION | [G-03, G-04, G-05, G-06] |
 | JP-LOGI-040 | 通関進捗トラッキング | SYSTEM | 出荷実行 | A_FULL_AUTO | [] |
@@ -599,6 +603,8 @@ Slice内訳: 20 Task = A:9 / B:6 / C:5 / D:0（A+B=75%。Cの5件は全て承認
 ## 4. Task Generator Logic（条件ルール表）
 
 Task Generatorは Project作成時（JP-LEAD-020）と DNA確定時（JP-LEAD-030）、およびDNA・Entry Route変更時に実行し、差分Taskを生成/SKIPする。既に `DONE` のTaskはSKIP対象にしない（履歴保持）。
+
+> ※ 本表のルール（R-01〜R-14）は DNA・Entry Route のみを条件にし、**カテゴリー条件は持たない**（Governance §13）。質問・CTQ・試験・検品・法規候補の中身はカテゴリー固有ロジックではなく、**Category Rule Pack + 属性タグ由来の Rule Engine 出力ビュー（QuestionList / TestPlanView / InspectionPlanView 等）から供給される**（18番 §8.1 接続仕様）。
 
 | Rule | 条件（DNAコード/Entry Route） | 生成・変更内容 |
 |---|---|---|
@@ -711,3 +717,4 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 |---|---|---|
 | v0.1 | 2026-08-10 | 初版Draft（A1）。全体マップ49プロセス、Vertical Slice 20Task（15項目完全形）、その他69Task、Task Generator 14ルール、NBA 15ルール、Automation Matrix A+B=80.9%、Governance変更提案2件 |
 | v0.2 | 2026-08-10 | 統合レビュー（14番）反映。G-14/G-15正式採用に伴うgates追記（JP-RFQ-030 / JP-PROP-060 / JP-PROP-070）、§7 Gate参照マップをv1.1レジストリへ更新、JP-REG-010のRegulatory遷移記述をA6 §1.5と整合（IR-09）、Status=Reviewed |
+| v0.3 | 2026-08-10 | 是正パス（Governance v2.1）反映。§14言語ルール是正4件（19番§5 #12〜#15: JP-REQ-030/JP-SPEC-010通知文言・JP-RFQ-020承認画面表示規則・JP-LOGI-010帳票名の日本語主表記）、Category-Agnostic注記追加（冒頭・§2）、Task Generator/JP-SPEC-010へのRule Pack供給参照（18番§8.1）。C分類15件の再点検で再分類なし（IR-13裁定・14番参照） |

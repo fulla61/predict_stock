@@ -3,7 +3,7 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| 版 | v0.2 |
+| 版 | v0.3 |
 | 日付 | 2026-08-10 |
 | 作成 | A5（China Ops / 中文文書設計） |
 | 準拠 | 05-governance-pack.md v1.1（用語ZH列・ID体系§2・Status§3・Gate§9・ハイブリッド運用§11に完全準拠） |
@@ -11,6 +11,8 @@
 
 本書は Master Prompt ■35（中国側全Task）・■36（中国語文書テンプレート）・■63（工場用Excel 13シート）に対応する A5 成果物である。
 Vertical Slice（0知識顧客 → Proposal → Requirement → RFQ → 中国語工場仕様書）に該当する §4（RFQ実例）と §5（产品规格书実例）を最も詳細に記述した。
+
+> 注: 本書中のタンブラー（§4 询价单・§5 产品规格书の実データ入り実例等）は**テストケース第1号の例であり、システム仕様ではない**（Governance §0-2 / §13）。システム仕様なのはテンプレート構造・運用ルールであり、品目・数値・検査項目の中身は Category Rule Pack + 属性タグからデータとして供給される（18番 §8）。
 
 ---
 
@@ -63,7 +65,7 @@ Vertical Slice（0知識顧客 → Proposal → Requirement → RFQ → 中国�
 | CN-LOGI-030 | 出荷承認申請 / 出货批准申请 | CN_OFFICE | **W** | C_HUMAN_DECISION | G-04, G-05, G-06 |
 | CN-CMP-010 | 市場不良分析 / 售后不良分析 | CN_OFFICE + FACTORY | **E**·C | B_AI_DRAFT | [] |
 
-- Automation集計: A=3 / B=24 / C=8 / D=0 → **A+B = 27/35 = 77%**。ただし C のうち CN-SMP-040 / CN-PROD-020 / CN-INSP-060 / CN-LOGI-030 は「判断のみ人間、準備・照合・帳票はAI」であり、工数ベースではA+B ≥ 80%を満たす見込み（正式集計はA1のAutomation Matrixに委ねる）。
+- Automation集計（§1.2表の実数）: A=3 / B=25 / C=7 / D=0 → **A+B = 28/35 = 80.0%**。（v0.3計数訂正: 旧記載「A=3/B=24/C=8=77%」は上表の実数と不一致だったため表を正として訂正。**分類値の変更・再分類は行っていない** — IR-13裁定・14番参照）。C分類7件は全てGate直結の承認・合否判定・実地監査であり、うち CN-SMP-040 / CN-PROD-020 / CN-INSP-060 / CN-LOGI-030 は「判断のみ人間、準備・照合・帳票はAI」（全Task合算の正式集計は14番 IR-13裁定=日中全Task合算に従う）。
 - 「未经批准禁止变更」は禁止条項（仕様書§5.10の契約条文）であると同時に、運用上は監視Task CN-QUAL-050 として常駐する。
 - 「老化测试」はカテゴリ依存Task。タンブラーでは該当せず Task Generator が `SKIPPED` で生成する（→【現実性メモ M1】）。
 
@@ -231,6 +233,8 @@ Governance §11 の4原則を、現場動作レベルまで具体化する。設
 ## 4. ★タンブラー中国語RFQテンプレート（询价单・実データ入り）
 
 Vertical Slice 検証用実例。日本側 Specification（CONFIRMED/PROVISIONAL項目）から Translation/Doc Engine が生成し、CN_OFFICE確認後に送付する想定の**実出力例**。
+
+> ※ 本実例（§4・§5）はテストケース第1号（タンブラー）による机上検証用の例であり、タンブラー専用のシステム仕様ではない（Governance §0-2）。品質要求・試験・検品項目は Category Rule Pack + 属性タグ由来の出力ビュー（InspectionPlanView 等）から流し込まれる（18番 §8）。
 
 > ファイル名: `CI-2026-0001_RFQ_V1_20260810_DRAFT.xlsx` → 承認後 `..._APPROVED.xlsx`
 > 表紙メタ: 项目编号 CI-2026-0001 / 文件编号 CI-2026-0001-RFQ-01 / 版本 V1 / 输出日期 2026-08-10 / 水印 DRAFT
@@ -594,3 +598,4 @@ ECR Status は Governance §3 の正準enum（DRAFT/SUBMITTED/UNDER_REVIEW/APPRO
 |---|---|---|
 | v0.1 | 2026-08-10 | 初版Draft（A5）。中国側35Task・ハイブリッド運用設計・翻訳ルール12例・タンブラーRFQ/规格书実例・13シート対応表・Factory Score・Change Control を記載 |
 | v0.2 | 2026-08-10 | 統合レビュー（14番）反映。Vertical Slice仕様をA2顧客決定と整合（本体色=深蓝Pantone 2767C単色1,000只・Logo=丝网印刷1色: IR-02/03）、RFQ §七へA6 §3.6の法規書類要求を追加（IR-05）、规格书文件编号をDOC-02へ（IR-07）、CN-RFQ-010をJP-RFQ-030接続に整理しG-14追記（IR-08）、v1.1正準用語（制程检验/積込立会）反映（IR-10）、Status=Reviewed。フタ仕様（防溅盖 vs 密閉タイプ）はOpen Issue IR-04として未修正 |
+| v0.3 | 2026-08-10 | 是正パス（Governance v2.1）反映。Category-Agnostic注記追加（冒頭・§4実例）、§1.2 Automation集計行の計数訂正（表実数 A=3/B=25/C=7 → A+B=28/35=80.0%。分類変更なし。IR-13裁定・14番参照）。C分類7件の再点検で再分類なし |
