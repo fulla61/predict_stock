@@ -145,3 +145,20 @@
 | v1.0 | 2026-08-10 | 初版（秘書AI）。Governance変更提案8件の裁定記録、矛盾13件（修正済み10 / Open Issue 3）の検出・裁定・反映、A3/A4/A7への引き継ぎ事項、4文書のReviewed昇格 |
 | v1.1 | 2026-08-10 | 是正パス（Governance v2.1）反映。IR-13裁定を追記（集計単位=日中全Task合算と定義、A1/A5のC分類再点検で再分類0件、12番§1.2集計行の計数訂正〔表実数A=3/B=25/C=7〕により最終合算A+B=100/124=80.6%でDoD-6充足）、IR-13をOpen Issue→裁定済みへ更新。是正対象4文書（10/11/12/13）はv0.3へ更新済み |
 | v1.2 | 2026-08-10 | 是正パス（A7条件消化）反映。§7 IR-04裁定記録を追記（案1採用・反映先・テストケース限定の裁定である旨=C-01）、IR-04を裁定済みへ、IR-12を解決済み（15番§3.3・A7 §4検証）へ更新、集計行更新（Open Issue 0件）。IR-13裁定へC-04再集計の整合追記（Claim管理2Task追加後 A+B=102/126=81.0%でDoD-6維持） |
+| v1.3 | 2026-08-11 | §8 オーナー承認記録（C-08消化）を追記 |
+
+---
+
+## 8. オーナー承認記録（C-08・追記専用）
+
+| 項目 | 内容 |
+|---|---|
+| 承認日 | 2026-08-11 |
+| 承認者 | オーナー（チャット指示による承認プロンプト。原文は会話記録・本節に要旨を転記） |
+| 承認対象 | **16点セット（22番§24）を条件付き承認**。主として ARCHITECTURE_LOCK 分類の構造・原則を承認するもの。CONFIGURABLE_RULE / CALIBRATION_VALUE の初期値・仮設定は永久固定ではなく、Phase 1の実案件・MVP検証結果に基づき変更可能 |
+| 承認16項目（オーナー原文の要旨） | ①Category-Agnostic共通基盤+Product Attributes/Rule Engine構造 ②Project DNA 8軸骨格 ③DNA/Commercial/Quality/Regulatory/Factory Profileの責務分離 ④Commercial Feasibility Loopの第一級エンティティ化 ⑤価格・数量・MOQ・開発費等を事前確定前提にしない ⑥MOQ・価格・開発条件を Factory×Requirement Version×Specification Version×Quote Version の条件として管理 ⑦Cost Ledger/Cost Architecture構造 ⑧見積・費用・仕様・承認情報の上書き禁止Version管理 ⑨Approved Production Reference Setを量産開始Hard Gateとする ⑩Q1〜Q4 Quality Profile・Dimension別品質管理・FIXED MINIMUM構造 ⑪Hard/Soft Gate Architecture ⑫情報遮断をUIだけでなくPDF/Excel/CSV/AI出力/通知/API/WeChat向け出力まで適用 ⑬追記専用Audit Logと証跡保持 ⑭Product FeedbackとComplaintの分離+Product Evolution接続 ⑮Product Version/Repeat/Next Productへの履歴継承 ⑯正常案件は自動進行し人間はDecision/Approval/Negotiation/Exception/Critical Issueに集中する運用思想 |
+| Phase 0 Freeze条件（オーナー指定11条件） | (1)必要変更16件（22番§1）の各文書への実反映 (2)既存構造は破棄せず追加・条件書換え・注記で吸収 (3)反映後に新たな重大構造矛盾がないこと (4)20ケースStress TestのGAP 0維持 (5)PASS_WITH_CONFIG 2件の必要設定データ・初期設定方針の明示 (6)P-9〜P-16の残余リスクをDecision Logへ追記 (7)LOCK/CONFIGURABLE/CALIBRATION区分の関連文書への明記 (8)「Architectureとして存在」と「MVPで実装」の分離明示 (9)約79テーブルの無条件全実装をしない (10)Phase 1 Minimum Schemaの再明示 (11)実装コードはFreeze最終確認完了まで開始しない |
+| 恒久維持事項（オーナー指定） | 実商流（顧客要望→要求整理→工場探索→RFQ→工場条件取得→Commercial Analysis→複数Option提案→顧客判断→条件変更/再交渉/再探索/再RFQ→条件合意→Sample→Approved Production Reference→Quality→Production→Inspection→Import→顧客指定納品先Delivery→Product Feedback→Improvement/Repeat/Version Up/New Product）。Loopは1周完結を前提にせず複数周回可。Cost Architectureの最低費目22群+Cost Item必須属性8種。マーケティング・広告・SNS・EC運営はScope外。FeedbackはComplaint限定にせず12分類でProduct Evolutionへ接続 |
+| 付帯確認 | Governance Pack v1.1〜v3.0 の秘書AI裁定（オーナー事後確認事項）は本承認をもって確認済みとする（21番P-3消化） |
+| Phase 0 Freeze後の運用 | 新たな改善案・追加アイデアは重大なArchitecture欠陥でない限りPhase 1 Backlogへ。Phase 0の再拡張禁止。Phase 1はVertical Slice（Loop最低2周のテストケース必須）を最優先 |
+| 状態 | **C-08消化。Phase 0 Freezeは上記11条件の是正パス完了+最終確認後に発効** |

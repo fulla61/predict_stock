@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **v3.0 APPROVED（v3.0差分はオーナー指示「実商流の統合」（Commercial Feasibility Loop・Cost Architecture・Profile分離・Production Reference等）を最上位制約として反映。過去差分の経緯はChange Log参照）** |
+| Status | **v3.1 APPROVED（2026-08-11 オーナー条件付き承認〔14番§8〕に伴う正式化。v1.1〜v3.0の秘書AI裁定は同承認で事後確認済み）** |
 | 適用範囲 | Crossimage Product OS に関わる全エージェント（A1〜A7, B1〜B6, C1〜C4, 運用AI Engine）および全設計・実装成果物 |
 | 変更手続 | 本書の変更は秘書AIがChange Logに追記し、オーナー承認後に発効。**各エージェントによる勝手な用語・Status・ID の新設は禁止**（必要時は「Governance変更提案」として成果物末尾に記載し、統合レビューで採否判定） |
 
@@ -80,7 +80,8 @@
 | Client | `CL-{NNNN}` | `CL-0042` |
 | Factory | `FA-{NNNN}` | `FA-0007` |
 | Project配下エンティティ | `{ProjectID}-{TYPE}-{NN}` | `CI-2026-0001-RFQ-01` |
-| TYPEコード | RFQ / QT(工場見積) / QO(顧客見積) / SMP / GS / ECR / PO / LOT / INS / SHP / CMP / CAPA / DOC / CLM(性能主張、v2.2追加・A4提案) | `…-SMP-02`（=Sample V2） |
+| TYPEコード | RFQ / QT(工場見積) / QO(顧客見積) / SMP / GS / ECR / PO / LOT / INS / SHP / CMP / CAPA / DOC / CLM(性能主張、v2.2追加・A4提案) / LOOP(Commercial Loop周回、v3.1追加) / FB(Product Feedback、v3.1追加) | `…-SMP-02`（=Sample V2） |
+| Product（案件横断の商品ID） | `PRD-{NNNN}`（グローバル採番） | `PRD-0001`（v3.1追加、A10提案） |
 | 業務Taskテンプレート（日本側） | `JP-{領域}-{NNN}`（10刻み） | `JP-PROP-020` |
 | 業務Taskテンプレート（中国側） | `CN-{領域}-{NNN}`（10刻み） | `CN-RFQ-010` |
 | Task実体（案件生成後） | `{ProjectID}-TSK-{NNNN}` | `CI-2026-0001-TSK-0031` |
@@ -129,6 +130,7 @@
 | FeedbackType（商品Feedback分類、v3.0） | `DEFECT / FUNCTION / DURABILITY / USABILITY / APPEARANCE / PACKAGING / LOGISTICS / INSTRUCTION / MISUSE / IMPROVEMENT_REQUEST / NEW_FEATURE_REQUEST / POSITIVE / OTHER` |
 | FeedbackCause（原因区分、v3.0） | `PRODUCT_FAILURE / DESIGN / MANUFACTURING / TRANSPORT / INSTRUCTION_GAP / CLIENT_USAGE / END_USER_MISUSE / UNKNOWN`（UNKNOWN≠商社責任） |
 | 設計要素分類（v3.0） | `ARCHITECTURE_LOCK / CONFIGURABLE_RULE / CALIBRATION_VALUE`（§0-8） |
+| CommercialLoop（v3.1） | `OPEN / ANALYZING / OPTIONS_PRESENTED / DECIDED / CLOSED`（§16。追記型・逆行なし） |
 
 ## 4. Project DNA（8軸・正準コード）
 
@@ -190,6 +192,7 @@ gates: [G-10]                    # 関係Gate（なければ []）
 `CLIENT / SALES / PM(商品開発) / QA / REG(法規担当) / TRADE(貿易) / MGR(経営・承認者) / CN_OFFICE / FACTORY / SYSTEM / AI`
 
 - 情報遮断（01の§8）を全成果物・全帳票に適用。**CLIENTに工場原価・粗利・他工場情報を、FACTORYに顧客販売価格・粗利・他工場情報を含めない**ことを、画面・Excel・WeChat要約の全チャネルで保証する。
+- **適用チャネルの明確化（v3.1、オーナー承認⑫）**: 遮断はUI表示に限らず、PDF / Excel / CSV / **AI出力（生成文書・要約・提案文）** / 通知（メール・プッシュ）/ API応答 / WeChat向け出力 のすべてに適用する。
 - 承認の**代理ルール**: 各Hard Gate承認Roleには必ず代理承認者を定義する（承認者単一障害の禁止）。
 
 ## 9. Soft / Hard Gate（初期レジストリ）
@@ -380,3 +383,4 @@ Project DNAへ全情報を詰め込まない。以下を分離し相互参照す
 | v2.2 | 2026-08-10 | A3/A4のGovernance変更提案8件を全件採用: SpecVersion・PO・Sample実体・Shipment・Complaint進行・CAPAの各Status enum（A3①〜⑤）、TYPEコード`CLM`（A4①）、Soft Gate G-16 未実証Claim表現（A4②）、Glossary 2語 Claim/DUPRO（A4③、19番辞書への追補はA7後の最終整合パスで実施） |
 | v2.3 | 2026-08-10 | A7条件C-05の起案によるDoD-1範囲改訂: §15-1の対象を`10〜17`から`10〜19`へ拡大（v2.0で18・19を追加した際にDoD範囲が未更新だった欠陥の是正=RT-04）。他の変更なし。19番辞書へのClaim/DUPRO追補（v2.2予告分）は19番v0.2で実施済み |
 | v3.0 | 2026-08-10 | オーナー指示「実商流の統合」: §0-6〜10（実商流原則・Scope境界・確定分類・仮定禁止・納品後継続）、§3に9 enum追加（BudgetStatus/QuantityStatus/CustomerDecision/CostStatus/CostResponsibility/CostClass/DutyStatus/FeedbackType/FeedbackCause）+設計要素分類、G-02をApproved Production Reference Setへ改訂、§16 Commercial Feasibility Loop、§17 Cost Architecture、§18 Profile分離、§19 Feedback・Evolution・Knowledge資産化、DoDに10〜12項追加、22番・23番を割当。旧§15 DoDは§20へ改番 |
+| v3.1 | 2026-08-11 | オーナー条件付き承認（14番§8）に伴う正式化: TYPEコードにLOOP/FB追加、Product ID `PRD-{NNNN}` 追加、CommercialLoop Status enum追加（22番のGovernance変更提案①②③の採用）。情報遮断の適用範囲をUI/Excel/WeChatに加えPDF/CSV/AI出力/通知/APIまで含むことを§8注記として明確化（オーナー承認⑫） |
