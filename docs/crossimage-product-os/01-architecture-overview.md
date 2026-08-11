@@ -3,9 +3,9 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| Version | v1.1 |
+| Version | v1.2 |
 | 日付 | 2026-08-11 |
-| 準拠 | 05-governance-pack.md **v3.1** / 22-final-architecture-review.md §1（A-07の実反映） |
+| 準拠 | 05-governance-pack.md **v3.1** / 22-final-architecture-review.md §1（A-07の実反映） / 23-stress-test.md §8（Freeze前検証の軽微是正） |
 
 Master Prompt の36成果物のうち、以降の全設計・全実装の土台になる骨格をここに要約する。
 個別の詳細設計書（ERD全表、State Machine全図、画面Map等）は Phase 0 の各専門エージェントが本書を親として生成する。
@@ -124,7 +124,7 @@ COMMERCIAL / PRODUCT / DESIGN / FACTORY / QUALITY / REGULATORY / LOGISTICS の7 
 | 種別 | 例 | 挙動 |
 |---|---|---|
 | **Soft Gate** | Pantone未定でも概算RFQ可 | 警告付きで進行可 |
-| **Hard Gate** | 重大法規未確認→Shipment不可 / Golden Sample未承認→量産不可 / Critical Issue未解決→出荷不可 / 正式発注なし→量産不可 / 工場無断変更検知→出荷保留 | システムが物理的にブロック。人間でも承認記録なしに突破不可 |
+| **Hard Gate** | 重大法規未確認→Shipment不可 / Approved Production Reference Set（承認済み量産基準セット：量産の正となる承認済み基準物の組合せ。Golden Sampleは構成要素の一つ）未確定→量産不可（G-02 v3.0改訂） / Critical Issue未解決→出荷不可 / 正式発注なし→量産不可 / 工場無断変更検知→出荷保留 | システムが物理的にブロック。人間でも承認記録なしに突破不可 |
 
 Readiness は `RFQ READY / SAMPLE READY / PRODUCTION READY / SHIPMENT READY` を個別判定。
 
@@ -133,7 +133,7 @@ Readiness は `RFQ READY / SAMPLE READY / PRODUCTION READY / SHIPMENT READY` を
 ## 6. Quality 設計
 
 - **Quality Tier**: Q1 ESSENTIAL / Q2 STANDARD / Q3 PREMIUM / Q4 LUXURY。ただし安全・法令・重大機能はTierで緩和しない（FIXED MINIMUM）
-- **Quality Dimension**: Safety / Functional / Durability / Appearance / Sensory の5分類
+- **Quality Dimension**: Safety / Functional / Durability / Appearance / Sensory / Packaging の**6分類**（v1.2: Packagingを第6 Dimensionとして正式化=16番v0.3・22番§1 A-13と整合）
 - **Defect**: CRITICAL / MAJOR / MINOR。安全・重大法令不良は原則Critical
 - **外観基準**: A/B/C Surface × 欠陥種(Scratch/Dent/色差/印刷ズレ/バリ/糊/隙間/汚れ) × 検査距離・照明・最大サイズ・最大数。OK/Limit/NG Sample写真を保存
 - 顧客には AQL/CTQ を見せず「コスト重視/標準/ブランド重視/プレミアム」で選択させ、内部で正式基準へ変換
@@ -192,3 +192,4 @@ KPI（重要業績評価指標：経営判断に使う測定値）は Automation
 |---|---|---|
 | v1.0 | 2026-08-10 | 初版（Phase 0骨格要約） |
 | v1.1 | 2026-08-11 | 是正パスR2（22番§1 A-07の実反映・Governance v3.1準拠）。AI Enginesに Feasibility & Cost Simulation Engine（実現性・費用試算）を追加。§2エンティティ図に CommercialLoop / CommercialProfile / CostLedger / ProductionReferenceSet / DeliveryTerms / Product・ProductVersion / ProductFeedback を追記。§4に Commercial Feasibility Loop（第一級Workflow・事前確定前提の禁止）と「納品はProjectの終了ではない」（Governance §0-10）を追記。§8に遮断チャネル拡張（v3.1）とCost系sensitivity適用を追記。§9 KPI設計（DoD-11の16指標一覧・定義は22番§10.3参照）を新設。Statusヘッダを新設 |
+| v1.2 | 2026-08-11 | Freeze前検証（23番§8）の軽微是正2件。§5 Hard Gate例示をG-02 v3.0改訂後の表現（Approved Production Reference Set未確定→量産不可。Golden Sampleは構成要素の一つ）へ更新。§6 Quality Dimensionを5分類→**6分類**（Packaging追加）へ是正し16番v0.3（A-13）と整合（16番§0.2の「01番5分類は読み替え」注記の解消）。構造変更なし |

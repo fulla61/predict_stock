@@ -3,7 +3,7 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| 版 | v0.3 |
+| 版 | v0.3.1 |
 | 日付 | 2026-08-11 |
 | 作成エージェント | A3（DB / ERD Architect）/ 是正パスR1 |
 | 準拠 | 05-governance-pack.md **v3.1**（ID体系§2〔CLM・LOOP・FB・PRD含む〕・Status enum§3〔v3.0 enum群・CommercialLoop含む〕・DNA§4・SoT§6・Version§7・Role§8・Gate§9〔G-02 v3.0改訂・G-16含む〕・ハイブリッド運用§11・2層アーキテクチャ§13・言語ルール§14・§16 Commercial Feasibility Loop・§17 Cost Architecture・§18 Profile分離・§19 Feedback/Evolution/Knowledge）/ 22-final-architecture-review.md §1（A-01/A-03/A-06/A-12）および§5〜§9/§11/§13〜§17の設計案（是正パスR1の作業指示）/ 01-architecture-overview.md / 14-integration-review.md §3（A3引き継ぎ事項・IR-12）・§8（オーナー条件付き承認） / 18-category-rule-packs.md（Rule Packデータモデル） / 17-a7-red-team.md（条件C-02・C-03・C-05・C-09の消化） |
@@ -426,7 +426,7 @@ erDiagram
 | factory_knowledge | — | factory_id, topic(実績由来のMOQ・価格・納期レンジ / 品質実績 / 対応可能工程), value JSONB, basis(同上), source_project_id | factories, projects | **Phase 1後半（TBD）**。Factory Score（12軸・既存）と分離: **Scoreは評価、Knowledgeは推定材料**。案件CLOSED時の実績還流Task（A分類）が供給元。異常値の還流はレビュー付き（22番P-13） |
 
 **テーブル数: 89**（ビュー・パーティションを除く。内訳: 既存69 + v0.3追加20〔本定義18表 = quote_conditions / moq_dimensions / commercial_profiles / commercial_profile_versions / commercial_loops / cost_ledgers / cost_items / cost_categories / cost_item_catalog / duty_assessments / landed_cost_snapshots / production_reference_sets / reference_items / products / product_versions / product_feedbacks / delivery_terms / business_calendars、Phase 1後半TBD骨子2表 = client_knowledge / factory_knowledge〕）。
-※v0.2までの集計値「64」は§2.2〜§2.14の実定義数69と乖離していたため、v0.3で**実数集計へ是正**した（この是正にテーブル定義の追加・削除は含まれない。22番§17の「Phase 1 Minimum ≒ 既存62 + v3.0追加17 = 約79表」の算術とも整合: 69 − Phase 1後送7表 = 62。§10.3参照）。
+※v0.2までの集計値「64」は§2.2〜§2.14の実定義数69と乖離していたため、v0.3で**実数集計へ是正**した（この是正にテーブル定義の追加・削除は含まれない。22番§17の群別集計〔合計79表〕とも算術整合: 実数69 − Phase 1後送7表 = 62、+ v3.0追加17表 = 79。なお22番§17本文の「既存64」は本書v0.2時点の旧集計値、「v3.0追加は15表+マスタ」は cost_categories / cost_item_catalog の2参照マスタを表数に含めない数え方であり、本書の17表と同内容。§10.3参照）。
 
 ---
 
@@ -851,3 +851,4 @@ Governance §0-8の設計要素分類 — `ARCHITECTURE_LOCK`（後から変え�
 | v0.1 | 2026-08-10 | 初版作成（A3）。ERD4面 / テーブル定義62表（公開ID+サロゲートキー方針、spec_fields・golden_samples・approvals・audit_logs・documents・Rule Pack層・RBAC遮断の詳細設計）/ State Machine 14本（IR-12裁定: 产品规格书は単一版系列のDRAFT→APPROVED遷移、RFQはDRAFT添付可・量産はAPPROVED版必須をDB制約化）/ Gate定義のデータ化とReadiness導出 / File・Version管理（「最新版」ファイル名のCHECK禁止）/ Audit Architecture（ハッシュチェーン+WORMアンカー）/ カテゴリー固有カラム禁止の規約 / Governance変更提案5件 |
 | v0.2 | 2026-08-10 | 是正パス（A7条件消化）反映。C-02: `claims`表追加（Claim Ledger=16番§7.1のスキーマ化）・gate_definitions初期データ16行化（G-16行）・id_sequencesへCLM追加・Claim State Machine追加（§3.15、計15本）。C-03: `sales_orders`（顧客受注）追加とG-01宣言的条件の定義（§4.1/§4.3/§3.7、確定見積のみ参照可CHECK）。C-05: §9の5提案を「05 v2.2採用済み」へ更新。C-09: §3.10のRELEASED副作用を暫定ブッキング先行・書類ドラフト先行生成と整合（RT-08）。テーブル数62→64。準拠をv2.2へ更新、Status=Reviewed（DoD-1対応） |
 | v0.3 | 2026-08-11 | **是正パスR1**（オーナー条件付き承認〔14番§8〕のPhase 0 Freeze条件＝22番§1必要変更リストの実反映。23番F-1所見の消化。既存表の削除・破壊的変更なし＝追加型のみ）。**A-01**: v3.0実商流テーブル群を§2.15として追加（commercial_profiles(+versions) / commercial_loops / cost_ledgers / cost_items / cost_categories / cost_item_catalog / duty_assessments / landed_cost_snapshots / production_reference_sets / reference_items / products / product_versions / product_feedbacks / delivery_terms / business_calendars、Phase 1後半TBD骨子=client_knowledge / factory_knowledge）。**A-03**: quotes版管理拡張（(rfq_id,factory_id,version_no)+supersedes_quote_id版連鎖・前提条件9点カラム・moq単一カラムの代表値降格注記・導出ビューv_quote_diff・失効管理）+ quote_conditions / moq_dimensions新設、quotationsへLoop/Landed Cost版FK追加。**A-06**: gate_definitionsのG-02条件を「production_reference_sets最新版のrequired_components全行APPROVED」へ書換え（§4.1/§4.3/§3.7。golden_samplesはcomponent_type=GOLDEN_SAMPLEの実装として位置づけ・Claim/G-16行は既存のまま）。**A-12**: duty_assessmentsとimportsの関係定義（imports.duty_amounts=ACTUALの置き場と注記）。**CommercialLoop State Machine**追加（§3.16・22番§6.1分岐副作用付き。15本→**16本**）。**費目シード対応表**（オーナー指定22費目群×8分類×catalogシード）と**Cost Item必須8属性のスキーマ強制**を明記。**§10 Phase 1 Minimum Schema**（約79表の正式再掲・「約79表を無条件で全実装しない」方針・テーブル区分〔MVP必須/Architecture定義のみ/Phase 1後半〕＝オーナー条件8・9・10)、**§11 LOCK/CONFIGURABLE/CALIBRATION区分**（オーナー条件7）を追加。id_sequencesへLOOP/FB/PRD反映（05 v3.1）。テーブル集計を実数へ是正（旧集計64→実数69）し最終**89表**（うちTBD骨子2）。準拠を05 v3.1へ更新 |
+| v0.3.1 | 2026-08-11 | Freeze前検証（23番§8）の参照ズレ是正のみ。§2.15末尾の22番§17引用を実記載に即した記述へ修正（22番の「既存64」=本書v0.2旧集計値、「v3.0追加15表+マスタ」=cost_categories/cost_item_catalogを表数に含めない数え方で本書17表と同内容、を明記。集計値89表/約79表・テーブル定義の変更なし） |

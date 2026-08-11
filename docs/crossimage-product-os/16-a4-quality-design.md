@@ -3,7 +3,7 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| 版 | v0.3 |
+| 版 | v0.3.1 |
 | 日付 | 2026-08-11 |
 | 作成エージェント | A4 |
 | 準拠 | Governance Pack **v3.1**（§1 Claim/DUPRO正準語 / §2 TYPEコードCLM / §3 Status正準enum / §4 Quality Tier正準コード / §9 G-02改訂〔Approved Production Reference Set〕・G-16 / §13 Category-Agnostic 2層アーキテクチャ / §14 言語設計ルール / §18 Profile分離〔6 Quality Dimension・Packaging含む〕）、14番 統合レビュー §4「A4への引き継ぎ事項」・v1.2 §7（IR-04裁定記録）、18番 Rule Packデータ構造、22番 §11/§12 |
@@ -28,7 +28,7 @@
 - AQL（抜取検査基準：ロットから抜き取る数と合否判定数の規格。ISO 2859-1 ≒ JIS Z 9015 ≒ GB/T 2828.1）
 - Ac/Re（合格判定数/不合格判定数：抜取サンプル中の不良がAc個以下なら合格、Re個以上なら不合格）
 - FIXED MINIMUM（絶対最低基準：安全・法令・重大機能・虚偽表示防止に関わるため、Quality Tierでは緩和できない基準）
-- Quality Dimension（品質次元：Safety安全 / Functional機能 / Durability耐久 / Appearance外観 / Sensory官能 / **Packaging包装** の**6分類**。v0.3でPackagingを第6 Dimensionとして正式化=Governance §18・22番§1 A-13。01番 §6の5分類表記は本書の6分類へ読み替える）
+- Quality Dimension（品質次元：Safety安全 / Functional機能 / Durability耐久 / Appearance外観 / Sensory官能 / **Packaging包装** の**6分類**。v0.3でPackagingを第6 Dimensionとして正式化=Governance §18・22番§1 A-13。01番 §6も6分類へ是正済み〔01番v1.2・23番§8〕）
 - LimitSample（限度見本：外観の許容限度を現物で示す見本。Governance §1 正準語）
 - Traceability（トレーサビリティ：材料・部品・工程・ロットを遡って特定できる記録体系）
 - IPQC（工程内検査：生産途中で行う検査。Governance §1 正準語）
@@ -624,3 +624,4 @@ claim:                              # 性能主張1件 = 1レコード
 | v0.1 | 2026-08-10 | 初版（A4）。Quality Tierパラメータレジストリ26項目、FIXED MINIMUM 4領域とマージ規則接続、外観基準テンプレート（8欠陥種×A/B/C面×Tier既定値）、Defect判定規則とAQL運用（100%切替・厳格/緩和切替）、品質⇄コスト可視化、Quality Recommendation Engine仕様、Claimアーキテクチャによる IR-04 解決案（選択肢構造化・表現ルール・11番/12番修正提案・裁定推奨）、Q1 vs Q4 テストケース比較、Governance変更提案3件 |
 | v0.2 | 2026-08-10 | 是正パス（A7条件消化）反映。C-01: §7.5へIR-04裁定結果（案1採用確定・テストケース限定の裁定である旨）を追記。C-05: §10の3提案を「05 v2.2採用済み」へ更新（§7.1/§7.2のG-16・CLM参照も採用済み表記へ）。C-06: DUPRO正準表記（生産中検査/生产中检验〔DUPRO〕）へ本文更新（RT-19: §0.2/QT-14/§4.5/§8）、§1.5の18番同期注記を更新（RT-16消化を反映）。準拠をv2.2へ更新、Status=Reviewed（DoD-1対応） |
 | v0.3 | 2026-08-11 | 是正パスR3（22番§1・オーナー条件付き承認〔14番§8〕）。A-06: QT-12を「Reference Set確定は必須（全Tier共通）。Golden Sample要否は構成ルールによる」へ文言修正（G-02改訂=Approved Production Reference Set方式との整合）。A-13: Packagingを第6 Quality Dimensionとして正式化（§0.2を6分類へ、§1.3マトリクスへPackaging行追加、QT-19〜21の主帰属を変更。既存パラメータ値・26パラメータ・Q1〜Q4・FIXED MINIMUMは無変更）。22番§12: quality_profilesへのDimension別重点度（H/M/L）・重点CTQ格納の注記を§6.1へ追加。準拠を05 v3.1へ更新 |
+| v0.3.1 | 2026-08-11 | Freeze前検証（23番§8）の参照更新のみ。§0.2の「01番§6の5分類表記は読み替え」注記を「01番v1.2で6分類へ是正済み」へ更新（01番側の是正に伴う注記解消。設計内容の変更なし） |

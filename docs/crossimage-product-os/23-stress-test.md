@@ -3,9 +3,9 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| 版 | v1.0 |
-| 日付 | 2026-08-10 |
-| 作成エージェント | A11 |
+| 版 | v1.1 |
+| 日付 | 2026-08-11 |
+| 作成エージェント | A11 / Freeze前検証エージェント（§8） |
 | 準拠 | 05-governance-pack.md v3.0（§0実商流原則 / §3 v3.0 enum / §13 Category-Agnostic / §16 Commercial Feasibility Loop / §17 Cost Architecture / §18 Profile分離 / §19 Feedback・Evolution）、01番 / 10番 / 11番 / 13番 / 15番 / 16番 / 18番 |
 | 目的 | Governance Pack v3.0 のArchitecture（Universal Core + Category Rule Pack + Commercial Feasibility Loop + Cost Architecture + Profile分離）が、オーナー指定の20ケースを**Architecture変更なしに**処理できるかを机上検証する（DoD-10対応） |
 
@@ -253,8 +253,67 @@
 
 ---
 
+## 8. 再確認（v1.1・2026-08-11・Freeze前検証）
+
+オーナー条件付き承認（14番§8）のFreeze条件(1)〜(5)のうち、是正パスR1/R2/R3による22番§1必要変更16件（A-01〜A-16）の実反映完了後、本書の20ケース判定が維持されるかを実文書突合で再確認した。方法: 判定根拠に是正が及ぶケースの再点検 + その他ケースへの影響なし確認（全件再実行ではない）。
+
+### 8.1 A-01〜A-16の実反映確認（Freeze条件(1)(2)）
+
+全16件を反映先文書の該当箇所で確認し、**16件全件が反映済み**（不足0・逸脱0）。既存構造の破棄はなく全件が追加・条件書換え・注記で吸収されている（Freeze条件(2)充足）。要点: A-01=15番§2.15（v3.0テーブル群18表+TBD骨子2表・最終89表）/ A-02=11番§10+STEP12〜16 / A-03=15番§2.4（quotes版連鎖・前提条件9点・quote_conditions/moq_dimensions）/ A-04=10番§3.2（JP-LOOP-010/020/030・15項目完全形）/ A-05=10番§8（KPI16指標）/ A-06=15番§4.1 gate_definitions・10番JP-PROD-005/020+JP-SMP-050/060・16番QT-12の3箇所で「Approved Production Reference Set / required_components全行APPROVED / GS要否は構成ルールによる」の同一概念に整合（05 v3.1 §9・18番§1.3(10)とも一致）/ A-07=01番v1.1 / A-08=18番§1.3(10)第10要素REFERENCE_SET+RS略号+cost_item_seed_refs+MOQ次元候補 / A-09=20番v1.1（16点セットへの改訂・承認済みの注記方式。差替えでなく経緯記録保存＝目的達成の軽微な実装差として容認）/ A-10=11番STEP3/8ほか「工場確認前の目安」注記 / A-11=12番v0.5（RFQ§四第9〜12項+回収Excel同列）/ A-12=15番duty_assessments+imports注記・13番v0.5 / A-13=16番6 Dimension化 / A-14=19番#43〜52 / A-15=21番P-9〜P-16 / A-16=03番v1.1。
+
+### 8.2 20ケース再判定サマリー（Freeze条件(4): GAP 0維持）
+
+| ケース | 影響する是正 | 再確認結果 |
+|---|---|---|
+| 1〜6（情報欠落・不成立系） | A-01/A-03（commercial_profiles・commercial_loops・quote_conditionsが15番に実装定義） | 判定根拠が「Governance規定」から「スキーマ実装定義済み」へ強化。`PASS`維持 |
+| 7（金型ODM） | A-01/A-03/A-08/A-11（費目シード・MOQ次元マスタ・RFQ回収列が定義済み） | `PASS_WITH_CONFIG`維持。必要設定は§8.3で確定 |
+| 8〜9（ODM_1/包装のみ） | A-06/A-08（Reference Set可変構成が15番・18番§1.3(10)に着地。ODM_0/1構成例明記） | `PASS`維持 |
+| 10〜15（カテゴリー・リスク・Tier両極） | A-13（QT-19〜21の帰属変更のみ・パラメータ値/26項目/FIXED MINIMUM不変） | 構造影響なし。`PASS`維持 |
+| 16（Repeat） | A-04（JP-RPT-020の8項目チェックリスト化が10番に実装） | `PASS`維持 |
+| 17（V1→V2） | A-01（products/product_versions/product_feedbacksが15番§2.15.5に着地=F-1消化） | `PASS_WITH_CONFIG`維持。前提だった「15番へのテーブル追補」は完了、残りは初期データ設定のみ（§8.3） |
+| 18〜20（別カテゴリー・不良・誤使用） | 影響なし（Complaint/CAPA/Traceability/FeedbackCause機構は無変更） | `PASS`維持 |
+
+**再判定結果: PASS 18 / PASS_WITH_CONFIG 2 / GAP 0（維持）**。DoD-10充足の判定は変わらない。
+
+### 8.3 PASS_WITH_CONFIG 2件の必要設定データと初期設定方針（Freeze条件(5)）
+
+**Case 7（金型が必要な完全ODM）** — 構造の受け皿は全て定義済み。必要なのは以下のCONFIGURABLEデータ整備のみ:
+
+| # | 必要設定データ | 受け皿（定義済み構造） | 初期設定方針 |
+|---|---|---|---|
+| 1 | 金型関連Cost Itemシード | `cost_item_catalog`「開発・初期」分類（金型（Tooling）/ 治具 / 印刷版・版下。15番§2.15.3費目シード対応表#4） | Phase 1データ整備で投入。金型費は `cost_class=ONE_TIME`・`cost_responsibility`初期値=`TBD`（負担者はLoop内のOption提示・顧客合意で確定し、確定時に新行） |
+| 2 | 金型MOQ次元 | `moq_dimensions`初期シード「Custom Mold起工数量」（15番§2.4）+ `quote_conditions.condition_type=TOOLING` | 初期シード7次元に含めて投入。取得列は12番v0.5 RFQ§四第9〜10項（回収Excel同列）→取込時にquote_conditionsへ構造化登録 |
+| 3 | 金型の所有権・保管・移管の記録項目 | Custom Cost Item属性セット（所有権者 / 保管場所 / 移管条件 / 金型寿命ショット数=F-2）。記録先は `cost_items.assumption`+`evidence_document_id`、移管・精算はECR/精算Task（15番§3.7 PO取消副作用）で証跡化 | 初期値方針: 顧客負担時=CLIENT所有・工場保管（保管場所・返却条件を受注時に明記）、Crossimage負担時=CROSSIMAGE所有。属性セットのシード定義をPhase 1データ整備の受入基準に含める（F-2の消化先。構造変更不要） |
+| 4 | 償却方式の選択肢定義 | Loop Option提示の選択肢データ（22番§6.1 options_presented）+ quote_conditions（TOOLING行）への記録 | 初期3方式=一括負担 / 単価上乗せ償却 / 分割（CONFIGURABLE。Case 7本文どおり）。選択結果と償却前提はcost_items.assumptionに必須記載 |
+
+**Case 17（V1→V2改良）** — 前提条件だった「§19規定エンティティの15番追補」は15番v0.3で完了（F-1消化）。残る設定データ:
+
+| # | 必要設定データ | 受け皿（定義済み構造） | 初期設定方針 |
+|---|---|---|---|
+| 1 | Product / ProductVersion / ProductFeedbackの実装 | 15番§2.15.5（`PRD-{NNNN}`グローバル採番・parent_version_id系譜・addressed_feedback_ids・`{ProjectID}-FB-{NN}`） | Phase 1 Minimum Schema「納品後」群3表として実装（15番§10.2）。TYPEコードFB/PRDは05 v3.1採用済み＝追加のGovernance変更不要 |
+| 2 | FeedbackType / FeedbackCause enum | 05 v3.0 §3正準enum | 正準値をそのまま使用（新設不要）。原因確定前は`UNKNOWN`保持（UNKNOWN≠商社責任） |
+| 3 | Feedback source区分マスタ | 15番§2.15.5（CONFIGURABLE） | 初期5区分=CLIENT / END_USER / EC_REVIEW / CN_OFFICE / INTERNAL で開始 |
+| 4 | Complaint昇格条件・収集タイミング | 昇格条件=CONFIGURABLE_RULE、収集タイミング=CALIBRATION_VALUE（22番§21） | 昇格条件初期値=「責任・是正・賠償を伴う事案」（判断は人間。Feedback登録自体は承認不要の軽量運用）。能動収集Taskは納品後30/60日で開始し実測で校正 |
+| 5 | V1→V2差分比較 | 導出ビュー `v_product_version_diff`（15番§2.15.5。§19の7比較軸） | FK済みデータからの機械生成のみ（人間の資料作成ゼロ）を実装受入基準とする |
+
+### 8.4 検出した不整合と是正（Freeze条件(3)）
+
+| # | 内容 | 種別 | 処置 |
+|---|---|---|---|
+| 1 | 01番§6「Quality Dimension 5分類」がA-13（Packaging第6 Dimension正式化=16番v0.3）と不一致 | 軽微（数値の食い違い） | **是正済み**: 01番v1.2で6分類へ更新（16番v0.3.1で読み替え注記も解消） |
+| 2 | 01番§5のHard Gate例示「Golden Sample未承認→量産不可」がG-02 v3.0改訂前の表現のまま残置 | 軽微（表現ズレ） | **是正済み**: 01番v1.2で「Approved Production Reference Set未確定→量産不可（Golden Sampleは構成要素の一つ）」へ更新 |
+| 3 | 15番§2.15末尾の22番§17引用が22番の実記載（「既存64」「v3.0追加15表+マスタ」）と字句不一致 | 軽微（参照ズレ） | **是正済み**: 15番v0.3.1で実記載に即した記述へ修正。22番の「既存64」は15番v0.2時点の旧集計値（実数69へ是正済み）、「15表」はcost_categories/cost_item_catalogの2参照マスタを表数に含めない数え方で15番の17表と同内容＝**算術矛盾なし**（22番§17の群別集計〔合計79表〕は正しい）。22番本文はレビュー時点の記録として不変更 |
+| 4 | 22番§24-②の「91Task+Loop系3Task」（=94）に対し、最終Task数は95（Loop系3件+JP-PROD-005=A-06由来の1件） | 記録のみ（構造矛盾ではない。JP-PROD-005は22番⑥⑬の承認範囲内） | 10番v0.5に達成計算明記済み: 日本側A+B=77/95=**81.1%**、日中合算=(77+28)/(95+35)=105/130=**80.8%**（≥80%維持。22番§24-⑩の承認条件充足。検算一致を本検証で確認） |
+
+**新たな重大構造矛盾: なし**。横断確認の結果: (a)Task数・Automation比率は10番v0.5の集計と検算一致（95件/130件・81.1%/80.8%）。(b)テーブル数集計（最終89表=実数69+追加20〔うちTBD骨子2〕、Phase 1 Minimum約79表=62+17+moq_dimensionsマスタ）は15番内・22番§17群別集計と算術整合。(c)G-02は05 v3.1/10番/15番/16番/18番の5文書で同一概念。(d)11番STEP12〜16 ⇄ 10番JP-LOOP-010/020/030 ⇄ 15番commercial_loops State Machine（OPEN→ANALYZING→OPTIONS_PRESENTED→DECIDED→CLOSED・NEGOTIATEのみ同Loop内戻り・Loop各周回の顧客操作3画面以内）は3者整合。(e)新規追記部分に言語ルール（§14）違反の英語単独出現なし。
+
+**結論: Freeze条件(1)〜(5)の検証項目はすべて充足（判定=PASS）。GAP 0維持・PASS_WITH_CONFIG 2件の必要設定データと初期設定方針は§8.3のとおり明文化済み。**
+
+---
+
 ## Change Log
 
 | 版 | 日付 | 変更 |
 |---|---|---|
 | v1.0 | 2026-08-10 | 初版作成（A11）。オーナー指定20ケースの机上検証。結果: PASS 18 / PASS_WITH_CONFIG 2 / GAP 0、Architecture変更不要。フォローアップ所見4件（F-1〜F-4）を記録 |
+| v1.1 | 2026-08-11 | §8「再確認（Freeze前検証）」を追加。是正パスR1/R2/R3完了後の検証: A-01〜A-16全16件の実反映を確認（不足0・逸脱0）、20ケース再判定=PASS 18 / PASS_WITH_CONFIG 2 / **GAP 0維持**、PASS_WITH_CONFIG 2件（Case 7金型ODM / Case 17 V1→V2）の必要設定データ・初期設定方針を明文化（§8.3。F-1消化確認・F-2の消化先指定）、軽微不整合3件を是正（01番v1.2・15番v0.3.1・16番v0.3.1）+記録1件。新たな重大構造矛盾なし。Statusヘッダをv1.1へ |
