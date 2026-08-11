@@ -3,10 +3,10 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| 版 | v0.2 |
-| 日付 | 2026-08-10 |
+| 版 | v0.3 |
+| 日付 | 2026-08-11 |
 | 作成エージェント | A8 |
-| 準拠 | Governance Pack v2.2（特に §13 Category-Agnostic 2層アーキテクチャ / §14 言語設計ルール / §7 Versionルール。§2 Rule Pack ID・§3 RulePack enumはv2.1採用済み） |
+| 準拠 | Governance Pack **v3.1**（特に §13 Category-Agnostic 2層アーキテクチャ / §14 言語設計ルール / §7 Versionルール / §16 Commercial Feasibility Loop〔MOQ次元=CONFIGURABLE_RULE〕 / §17 Cost Architecture〔費目シード〕。§2 Rule Pack ID・§3 RulePack enumはv2.1採用済み、G-02改訂〔Reference Set〕は22番§11） |
 
 ---
 
@@ -39,7 +39,7 @@
 
 ### 1.1 Pack 全体構造
 
-1つの Category Rule Pack は「Packヘッダ + 9要素のルール集合」で構成する。全要素は共通の Rule Record（ルールレコード：1件のルールを表すデータ行）形式に載せ、要素ごとの固有フィールドを payload（本体データ：要素種別ごとの中身）として持つ。
+1つの Category Rule Pack は「Packヘッダ + **10要素**のルール集合」で構成する（v0.3・22番§1 A-08: 第10要素 REFERENCE_SET を追加。**DSL〔§1.4ホワイトリスト〕・スキーマ検証の枠組みは無変更**であり、要素・payloadフィールドの追加はデータ定義の追加のみ）。全要素は共通の Rule Record（ルールレコード：1件のルールを表すデータ行）形式に載せ、要素ごとの固有フィールドを payload（本体データ：要素種別ごとの中身）として持つ。
 
 ```yaml
 rule_pack:
@@ -53,17 +53,18 @@ rule_pack:
   approved_by: {qa: QA, reg: REG, final: MGR}
   source_projects: [CI-2026-0001] # 根拠となった実案件ID（未知カテゴリー由来の場合）
   change_log: [...]
-  rules:                          # 9要素 × Rule Record の配列
+  rules:                          # 10要素 × Rule Record の配列
     - {rule_id: RP-001-RQ-01, element: REQUIRED_QUESTION, ...}
     - {rule_id: RP-001-CTQ-01, element: CTQ, ...}
+    - {rule_id: RP-001-RS-01, element: REFERENCE_SET, ...}   # v0.3追加（第10要素）
 ```
 
-### 1.2 Rule Record 共通フィールド（全9要素共通）
+### 1.2 Rule Record 共通フィールド（全10要素共通）
 
 | フィールド | 型 | 説明 |
 |---|---|---|
-| rule_id | ID | `{PackID}-{要素略号}-{NN}`（要素略号: RQ/CTQ/RSK/REG/TST/QS/FQ/IT/PK） |
-| element | enum | 9要素のいずれか（下記1.3） |
+| rule_id | ID | `{PackID}-{要素略号}-{NN}`（要素略号: RQ/CTQ/RSK/REG/TST/QS/FQ/IT/PK/**RS**〔REFERENCE_SET・v0.3追加〕） |
+| element | enum | 10要素のいずれか（下記1.3） |
 | condition | 限定DSL | 発火条件。DSL（限定記述言語：使える語彙を制限した宣言的な設定記述形式）で記述。**許可語彙は §1.4 のホワイトリストのみ** |
 | priority_class | enum | `SAFETY / REGULATORY / FUNCTION / DURABILITY / APPEARANCE / SENSORY / LOGISTICS`（矛盾解決の優先順位キー。§2.4） |
 | tier_scaling | 表 | Q1〜Q4 各Tierでの強度値（該当しない要素は `none`）。SAFETY/REGULATORY 行は全Tier同値（FIXED MINIMUM）であることをスキーマで強制 |
@@ -71,7 +72,7 @@ rule_pack:
 | source | 文字列 | 根拠（法規名・実績案件ID・クレームID等） |
 | notes_ja / notes_zh | 文字列 | 人間向け注記（表示用。§14言語ルール準拠の説明文） |
 
-### 1.3 9要素の payload フィールド定義
+### 1.3 10要素の payload フィールド定義
 
 #### (1) Required Questions（必須質問）
 
@@ -151,6 +152,7 @@ rule_pack:
 | mandatory_by_tier | Tier・ProductRisk別の 必須/推奨 区分（SAFETY起因は全条件で必須） |
 | verify_method | 確認方法 `DOCUMENT / AUDIT / SAMPLE_EVAL`（書類 / 工場監査（FA-xxxx-AUD参照）/ サンプル評価） |
 | rfq_requirement | RFQ段階で工場に要求する書類（A6 13番 §3.6 形式と接続） |
+| moq_dimension_candidates | **（v0.3追加・22番A-08）** RFQ・Quote回収時に工場へ確認するMOQ次元（数量条件の単位）の候補。CONFIGURABLEマスタ `moq_dimensions` のキー参照（per Order / per SKU / per Color / per Size / per Material / per Packaging / Custom Mold起工数量 等）。回収列は12番RFQテンプレート§四に接続し、回答は `quote_conditions`（Quote版従属のCommercial Condition）へ格納。MOQを工場固定属性として供給しない（Governance §16） |
 
 #### (8) Inspection Template（検品テンプレート）
 
@@ -172,6 +174,23 @@ rule_pack:
 | transport_test | 輸送試験参照（ISTA（国際輸送包装試験規格：輸送中の落下・振動・圧縮を模擬する試験規格）等） |
 | label_requirement | 表示要件（取扱注意・電池マーク・原産国等。法規表示は Regulatory Candidates と連動） |
 | special_flags | 特殊要件フラグ（大型 / 液体 / 電池内蔵 / 危険品該当可能性） |
+| cost_item_seed_refs | **（v0.3追加・22番A-08）** カテゴリー特有費用の費目シード候補（`cost_item_catalog`〔費目シードマスタ・CONFIGURABLE〕のキー参照。例〔例でありシステム仕様ではない〕: 電池系の危険品輸送費・大型品のパレット/ドレージ費）。Cost Ledger（費用台帳）の案件初期化時の費目候補として供給する（22番§8）。費用レンジ（lt_cost_range系）は既存のカテゴリー価格レンジ供給（§8.4 Reco Engine入力）と同機構でCost Simulationへ供給することを明示（暗黙供給の解消） |
+
+#### (10) Reference Set（案件別Reference Set構成の既定ルール。v0.3追加・22番§1 A-08 / §11.3）
+
+Approved Production Reference Set（承認済み量産基準セット：量産の正となる承認済み基準物の組合せ。G-02改訂の判定対象）の**案件別必要構成の既定ルール**をRule Packが供給する。評価結果は `production_reference_sets.required_components` のスナップショットとなり、G-02の宣言的条件・10番JP-PROD-005（Reference Set確定）が消費する。
+
+| フィールド | 説明 |
+|---|---|
+| required_components | 必要構成要素のリスト。値は次の8種のみ（Governance §9 G-02行と同一語彙・新設なし）: `GOLDEN_SAMPLE / APPROVED_SPECIFICATION / APPROVED_DRAWING / APPROVED_BOM / APPROVED_ARTWORK / APPROVED_COLOR_SAMPLE / APPROVED_PACKAGING / PREVIOUS_APPROVED_PRODUCTION` |
+| mandatory_class | `MANDATORY / CONDITIONAL`（CONDITIONALは condition で発火条件を記述） |
+| entry_route_override | Entry Route別の上書き（例: Route D〔Repeat・仕様変更なし〕= PREVIOUS_APPROVED_PRODUCTION 継承+再確認チェック済み） |
+| floor_rule | 下限引上げ条件（例: PRISK_HIGH以上 / BIMP_CRITICAL はフルセット側へ引上げ・緩和不可） |
+| notes_ja / notes_zh | 構成理由の人間向け注記 |
+
+- 発火条件は既存 condition DSL（§1.4ホワイトリスト: OdmLevel × ProductRisk × BrandImpact 等）で記述する。**DSL語彙・スキーマ検証の枠組みは無変更**（本要素の追加はスキーマへのデータ定義追加のみ）。必要構成 = f(OdmLevel × ProductRisk × BrandImpact × Rule Pack供給ルール × Entry Route) はCONFIGURABLE_RULE（22番§11.3）。
+- **初期ルールは保守側（現行Golden Sample必須相当）から開始**し、緩和方向の変更はMGR承認必須とする（22番§23 P-14の低減策）。
+- 例（例でありシステム仕様ではない）: ODM_0_STOCK（既製品+ロゴなし）= Approved Specification + Approved Color Sample（現物GS新規作成は不要にできる）/ ODM_3以上 = フルセット（GS + Drawing + BOM + Artwork + Packaging）。
 
 ### 1.4 「データでありコードではない」ことの構造的保証
 
@@ -246,8 +265,9 @@ rule_pack:
 | TestPlanView | stage別試験計画（費用・LT付） | A1 Task Generator（試験Task生成）/ RFQ添付 |
 | InspectionPlanView | 検品計画（IPQC/首件/出荷検品、中国語併記） | A5 中国側Task / InspectionPlan |
 | RegulatoryCandidateView | 法規候補 + 根拠 + expert_check | A6 Regulatory Engine（入力候補） |
-| FactoryQualView | 工場適格要件 + RFQ要求書類 | Factory Score Engine / RFQ生成 |
-| PackagingView | 包装・物流要件 + 輸送試験 | LOGI系Task / 中国語仕様書 |
+| FactoryQualView | 工場適格要件 + RFQ要求書類 + **MOQ次元候補**（v0.3・§1.3(7)） | Factory Score Engine / RFQ生成（回収列は12番§4へ接続） |
+| PackagingView | 包装・物流要件 + 輸送試験 + **費目シード候補**（v0.3・§1.3(9)） | LOGI系Task / 中国語仕様書 / Cost Ledger初期化（22番§8） |
+| **ReferenceSetView**（v0.3追加） | 案件別Reference Set必要構成（8構成要素の評価結果・§1.3(10)） | production_reference_sets（required_componentsスナップショット）/ G-02宣言的条件 / 10番 JP-PROD-005・Task Generator（JP-SMP-050/060の生成条件） |
 
 ---
 
@@ -791,3 +811,4 @@ Governance §13「未対応カテゴリーのため受付不可という挙動�
 |---|---|---|
 | v0.1 | 2026-08-10 | 初版作成（A8）。Rule Packデータモデル（9要素）/ Rule Engine評価パイプライン / 属性13種マッピング表 / 20カテゴリー×10軸比較表 / ウォーターサーバー属性合成デモ（例）/ 未知カテゴリーフロー / 新カテゴリー追加手順 / A1・A2・A6接続仕様 / Governance変更提案2件 |
 | v0.2 | 2026-08-10 | 是正パス（A7条件消化）反映。C-05: §9の2提案を「05 v2.1採用済み」へ更新。C-06: §2.3のAQL数値を16番§1.2確定値へ同期（RT-16: MAJOR Q3/Q4=1.0/0.65、検査水準行を追加）。準拠をv2.2へ更新、Status=Reviewed（DoD-1対応） |
+| v0.3 | 2026-08-11 | 是正パスR3（22番§1 A-08・オーナー条件付き承認〔14番§8〕）。Rule Packの供給データ拡張: 第10要素 REFERENCE_SET（案件別Reference Set構成の既定ルール・8構成要素・保守側初期値・緩和はMGR承認）を追加（§1.1〜§1.3・要素略号RS）、MOQ次元候補を(7) Factory Qualification payloadへ・費目シード候補を(9) Packaging Requirement payloadへ追記、§2.5へReferenceSetView追加とFactoryQualView/PackagingViewの供給内容明示。**DSL（§1.4ホワイトリスト）・スキーマ検証の枠組みは無変更**（データ定義の追加のみ）。準拠を05 v3.1へ更新 |

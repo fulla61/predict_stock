@@ -2,8 +2,8 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **Reviewed / v0.4 / 2026-08-10 / A6** |
-| 準拠 | 05-governance-pack.md v1.1（Regulatory enum・G-03（v1.1明文化含む）・G-14・Role正準キー）、01-architecture-overview.md、02-agent-proposal.md（A6役割定義） |
+| Status | **Reviewed / v0.5 / 2026-08-11 / A6** |
+| 準拠 | 05-governance-pack.md **v3.1**（Regulatory enum・G-03〔v1.1明文化含む〕・G-14・Role正準キー・§3 DutyStatus enum〔v3.0〕・§17 Cost Architecture）、01-architecture-overview.md、02-agent-proposal.md（A6役割定義）※準拠欄が「05 v1.1」のまま残置されていた軽微所見（21番P-6）は本版で是正 |
 | 大原則 | **AIは法令の最終判断をしない。** 本Engineの出力は常に「適用法規の候補 + 判定根拠 + 専門家確認要否」であり、最終判断は人間（REG Role、必要に応じ外部専門家・所轄機関）が行う |
 | 法令記述の前提 | 本書の法令記述は **2026年1月時点の一般知識** に基づく設計用参考情報である。**実務では必ず最新の法令・政省令・告示・通知・所轄機関Q&Aを確認すること**（本書全節に適用） |
 
@@ -206,6 +206,7 @@ regulatory_assessment:
 
 - 初回輸入は**検疫所への事前相談**を必須Taskとする（`JP-REG-xxx` としてA1のTask体系へ連携）。
 - 実務では最新の検疫所運用・届出様式を確認すること。
+- **関税確度管理への参照（v0.5・22番§1 A-12）**: 上記(5)の輸入通関（関税法手続）における関税・輸入消費税は、`duty_assessments`（関税確度管理テーブル・22番§8.3）で管理する。HS Code候補（複数可）・原産国・課税価格・税率候補・EPA（経済連携協定：関税優遇の可能性）/FTA/RCEP適用候補・概算額を、**DutyStatus（関税確度enum: `AI_ESTIMATE → REVIEW_REQUIRED → BROKER_CONFIRMED → FINAL → ACTUAL`。Governance §3 v3.0）**付きで記録する。税率・計算方法のハードコードは禁止（マスタ+外部確認）。**AIだけで関税・法令を最終確定しない**（本書§6の免責・責任分界と同一原則。BROKER_CONFIRMED以上への遷移は通関業者等の外部確認を要する）。確定額（FINAL/ACTUAL）はLanded Cost（着地原価：顧客指定納品地点までの総原価）算定・Cost Ledger（費用台帳）へ接続される（22番§8）。
 
 ### 3.5 タンブラー用 Status運用例（Vertical Slice）
 
@@ -337,3 +338,4 @@ A5の中国語RFQテンプレート・A1のRFQ Taskに、以下を**必須添付
 | v0.2 | 2026-08-10 | 統合レビュー（14番）反映。提案-1はA1案と一本化のうえG-14として採用（本書単独案の残余はReadiness WARN表示として維持）、提案-2はG-03行に明文化済み。§4.1をv1.1正式定義参照へ更新、Status=Reviewed |
 | v0.3 | 2026-08-10 | 是正パス（Governance v2.1）反映。§14言語ルール是正3件（19番§5 #16〜#18: §4.2 Readiness不足理由の日本語状態名化・WARN表記の日本語主化・ポジティブリスト略語のフル表記〔中文含む〕）、Category-Agnostic注記追加（冒頭）、Regulatory EngineへのRule Pack供給参照（18番§8.3） |
 | v0.4 | 2026-08-10 | 是正パス（A7条件消化・C-01）反映。§3.2へlid_material連動注記を追加（RT-10: 試験は確定材質・確定グレードのサンプルで実施。IR-04裁定=案1採用により本テストケースのフタ行はTritanへ読み替え）、§3冒頭の対象記述をフタ=Tritan（確定材質）へ更新 |
+| v0.5 | 2026-08-11 | 是正パスR3（22番§1 A-12・オーナー条件付き承認〔14番§8〕）。§3.4輸入手続フローへ `duty_assessments`（関税確度管理: AI_ESTIMATE→REVIEW_REQUIRED→BROKER_CONFIRMED→FINAL→ACTUAL）参照を追記（Landed Cost / Cost Ledger接続含む）。ヘッダ準拠欄を「05 v1.1」→「05 v3.1」へ是正（21番P-6の軽微所見を同時消化） |

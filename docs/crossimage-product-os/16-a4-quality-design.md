@@ -3,10 +3,10 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| 版 | v0.2 |
-| 日付 | 2026-08-10 |
+| 版 | v0.3 |
+| 日付 | 2026-08-11 |
 | 作成エージェント | A4 |
-| 準拠 | Governance Pack v2.2（§1 Claim/DUPRO正準語 / §2 TYPEコードCLM / §3 Status正準enum / §4 Quality Tier正準コード / §9 G-16 / §13 Category-Agnostic 2層アーキテクチャ / §14 言語設計ルール）、14番 統合レビュー §4「A4への引き継ぎ事項」・v1.2 §7（IR-04裁定記録）、18番 Rule Packデータ構造 |
+| 準拠 | Governance Pack **v3.1**（§1 Claim/DUPRO正準語 / §2 TYPEコードCLM / §3 Status正準enum / §4 Quality Tier正準コード / §9 G-02改訂〔Approved Production Reference Set〕・G-16 / §13 Category-Agnostic 2層アーキテクチャ / §14 言語設計ルール / §18 Profile分離〔6 Quality Dimension・Packaging含む〕）、14番 統合レビュー §4「A4への引き継ぎ事項」・v1.2 §7（IR-04裁定記録）、18番 Rule Packデータ構造、22番 §11/§12 |
 
 ---
 
@@ -28,7 +28,7 @@
 - AQL（抜取検査基準：ロットから抜き取る数と合否判定数の規格。ISO 2859-1 ≒ JIS Z 9015 ≒ GB/T 2828.1）
 - Ac/Re（合格判定数/不合格判定数：抜取サンプル中の不良がAc個以下なら合格、Re個以上なら不合格）
 - FIXED MINIMUM（絶対最低基準：安全・法令・重大機能・虚偽表示防止に関わるため、Quality Tierでは緩和できない基準）
-- Quality Dimension（品質次元：Safety安全 / Functional機能 / Durability耐久 / Appearance外観 / Sensory官能 の5分類。01番 §6）
+- Quality Dimension（品質次元：Safety安全 / Functional機能 / Durability耐久 / Appearance外観 / Sensory官能 / **Packaging包装** の**6分類**。v0.3でPackagingを第6 Dimensionとして正式化=Governance §18・22番§1 A-13。01番 §6の5分類表記は本書の6分類へ読み替える）
 - LimitSample（限度見本：外観の許容限度を現物で示す見本。Governance §1 正準語）
 - Traceability（トレーサビリティ：材料・部品・工程・ロットを遡って特定できる記録体系）
 - IPQC（工程内検査：生産途中で行う検査。Governance §1 正準語）
@@ -71,7 +71,7 @@ Rule Engine・InspectionPlan 生成・コスト概算（§5）はすべて本表
 |---|---|---|---|---|---|
 | QT-10 | LimitSample要否 | 不要 | 推奨 | 必須 | 必須 |
 | QT-11 | LimitSampleセット構成 | —（作成時はOK/NGの2点） | OK/限度/NGの3点セット | 3点セット×双方保管（工場・商社各1式） | 3点セット×双方保管＋A面写真基準書（§3.4） |
-| QT-12 | GoldenSample／首件・試作量産の運用 | GoldenSample承認は必須（G-02。全Tier共通）。首件は写真確認可 | 首件現物確認 | 首件現物＋試作量産（PilotRun）を既定生成 | 首件現物＋PilotRun必須＋量産初日立会推奨 |
+| QT-12 | Reference Set／首件・試作量産の運用 | **Reference Set確定は必須（G-02。全Tier共通）。Golden Sample要否は構成ルールによる**（Approved Production Reference Set〔承認済み量産基準セット〕の必要構成=f(OdmLevel×ProductRisk×BrandImpact×Rule Pack×Entry Route)のCONFIGURABLE_RULE。22番§11.3。GSを要する構成の場合の3者承認・LOCK運用は従来どおり）。首件は写真確認可 | 首件現物確認 | 首件現物＋試作量産（PilotRun）を既定生成 | 首件現物＋PilotRun必須＋量産初日立会推奨 |
 
 #### (c) 検品ステージ・実施主体系（QT-13〜15）
 
@@ -89,7 +89,7 @@ Rule Engine・InspectionPlan 生成・コスト概算（§5）はすべて本表
 | QT-17 | 官能（Sensory）検査 | 実施しない | 明らかな異臭・異音のみ | 官能チェックリスト実施（手触り・匂い・操作感） | 官能チェックリスト＋GoldenSampleとの官能比較記録 |
 | QT-18 | 色管理方式 | 目視（限度内） | 签封色板（承認色見本）比較 | 色見本比較＋ΔE（色差の数値指標）測定 | 色見本＋ΔE測定＋ロット間色ブレ記録 |
 
-#### (e) 包装強化系（QT-19〜21）
+#### (e) 包装強化系（QT-19〜21。**第6 Quality Dimension: Packaging に帰属**〔v0.3・A-13。パラメータ値は不変〕）
 
 | ID | パラメータ | Q1 | Q2 | Q3 | Q4 |
 |---|---|---|---|---|---|
@@ -114,7 +114,7 @@ Rule Engine・InspectionPlan 生成・コスト概算（§5）はすべて本表
 | QT-25 | 生産進捗報告頻度（顧客向けはProgress Report Engine経由） | マイルストーンのみ（P50/P100/検品完了） | 週1回 | 週1回＋異常即時 | 週2回＋異常即時 |
 | QT-26 | 検品報告の形式 | 結果サマリ＋NG写真 | 標準報告書＋写真10枚以上 | フル報告書＋写真30枚以上＋動画（機能系） | フル報告書＋写真50枚以上＋動画＋LimitSample照合写真 |
 
-### 1.3 5 Quality Dimension × パラメータ族 対応マトリクス
+### 1.3 6 Quality Dimension × パラメータ族 対応マトリクス
 
 各パラメータがどの Quality Dimension の強度を動かすかの対応。Rule Pack の CTQ は `quality_dimension` を持つ（18番 §1.3(2)）ため、Rule Engine はこの対応で「次元→適用パラメータ」を引く。
 
@@ -122,9 +122,12 @@ Rule Engine・InspectionPlan 生成・コスト概算（§5）はすべて本表
 |---|---|---|---|---|---|
 | Safety（安全） | **Tier非連動**：QT-03固定・該当項目は全数または最厳（§2） | 対象外（安全は限度見本でなく合否基準） | 安全表示・警告同梱は全Tier必須 | QT-23の必須部分（全Tier） | 異常時即時報告（全Tier） |
 | Functional（機能） | QT-08 / QT-09 | GoldenSample照合（QT-12） | — | QT-22（機能部材ロット） | QT-25 / QT-26 |
-| Durability（耐久） | QT-09 / QT-16 | — | QT-20（輸送耐久） | QT-22 | QT-26 |
-| Appearance（外観） | QT-01 / QT-02 / QT-04〜07 | QT-10 / QT-11（主用途） | QT-19（外観保護） | QT-18（色ブレ追跡） | QT-26（写真枚数） |
-| Sensory（官能） | QT-17 | QT-11（官能もGolden/Limit照合） | QT-21 | — | QT-26 |
+| Durability（耐久） | QT-09 / QT-16 | — | QT-20（輸送耐久・Packaging次元との副次参照） | QT-22 | QT-26 |
+| Appearance（外観） | QT-01 / QT-02 / QT-04〜07 | QT-10 / QT-11（主用途） | QT-19（外観保護・Packaging次元との副次参照） | QT-18（色ブレ追跡） | QT-26（写真枚数） |
+| Sensory（官能） | QT-17 | QT-11（官能もGolden/Limit照合） | QT-21（Packaging次元との副次参照） | — | QT-26 |
+| **Packaging（包装）**（v0.3正式化） | QT-19（Q4は全数外装検査） | — | **QT-19〜21（主帰属。§1.2(e)）** | QT-24（ロット表示・刻印） | QT-26（開箱・外装写真） |
+
+- **v0.3（22番§1 A-13）**: Packagingを第6 Quality Dimensionとして正式化し、**QT-19〜21の主帰属をPackaging次元へ変更**した（既存パラメータの値・ID・Tier列はすべて不変。Durability/Appearance/Sensory行の包装関連参照は副次参照として維持）。Rule Pack CTQ の `quality_dimension` にPACKAGINGを追加供給する（18番 §1.3(2)のenum拡張はデータ定義の追加のみ・Governance §18の6 Dimensionと整合）。
 
 ### 1.4 Rule Engine との合成（属性×Tier）
 
@@ -399,8 +402,10 @@ Tier間差 = Σ（QT-01〜26 の該当Tier列差分に対する ΔCost% 合計�
 | 区分 | 内容 |
 |---|---|
 | 入力 | Category（Rule Pack ID）/ 確定・推定属性（ATTR_*）/ 想定販売価格（または配布単価・予算）/ 販売チャネル（配布・EC・店頭・ギフト・法人贈答等）/ BrandImpact（BIMP_*）/ ProjectDNA（特に QualityLevel 初期推定・ProductRisk・OdmLevel）/ Rule Pack CtqList（18番 §2.5 出力ビュー） |
-| 出力 | **Recommended Quality Profile** = 推奨Tier（Q1〜Q4）＋ 5次元の重点度（H/M/L）＋ 重点CTQ上位（用途回答から重み付け）＋ FIXED MINIMUM一覧（緩和不可の明示）＋ Tierパラメータ展開（§1.2該当列）＋ 概算コスト差（§5）＋ **理由文（§6.3）** |
+| 出力 | **Recommended Quality Profile** = 推奨Tier（Q1〜Q4）＋ 6次元の重点度（H/M/L。§1.3）＋ 重点CTQ上位（用途回答から重み付け）＋ FIXED MINIMUM一覧（緩和不可の明示）＋ Tierパラメータ展開（§1.2該当列）＋ 概算コスト差（§5）＋ **理由文（§6.3）** |
 | 分類 | B_AI_DRAFT（推奨生成=JP-QUAL-010）→ C_HUMAN_DECISION（Tier確定=JP-QUAL-020）。01番 §1 の「人間承認必須」に準拠 |
+
+> **注（v0.3・22番§12）**: 本Engineが出力する**Dimension別重点度（H/M/L）と重点CTQ**は、`quality_profiles`（Quality Profileの実体テーブル・15番）にDimension別カラムとして**格納**する（現行のtier+4択ラベルへのカラム追加・データ拡張のみで、テーブル構造の破棄・Tier体系の変更はない）。Quality Profileの値のSoT（Source of Truth：正となるデータ）はJP-QUAL-020確定時のquality_profilesであり、DNAのQualityLevel軸は参照キャッシュ（22番§3のSoT一本化ルール）。
 
 ### 6.2 推薦ロジック（スコア方式・決定表）
 
@@ -618,3 +623,4 @@ claim:                              # 性能主張1件 = 1レコード
 |---|---|---|
 | v0.1 | 2026-08-10 | 初版（A4）。Quality Tierパラメータレジストリ26項目、FIXED MINIMUM 4領域とマージ規則接続、外観基準テンプレート（8欠陥種×A/B/C面×Tier既定値）、Defect判定規則とAQL運用（100%切替・厳格/緩和切替）、品質⇄コスト可視化、Quality Recommendation Engine仕様、Claimアーキテクチャによる IR-04 解決案（選択肢構造化・表現ルール・11番/12番修正提案・裁定推奨）、Q1 vs Q4 テストケース比較、Governance変更提案3件 |
 | v0.2 | 2026-08-10 | 是正パス（A7条件消化）反映。C-01: §7.5へIR-04裁定結果（案1採用確定・テストケース限定の裁定である旨）を追記。C-05: §10の3提案を「05 v2.2採用済み」へ更新（§7.1/§7.2のG-16・CLM参照も採用済み表記へ）。C-06: DUPRO正準表記（生産中検査/生产中检验〔DUPRO〕）へ本文更新（RT-19: §0.2/QT-14/§4.5/§8）、§1.5の18番同期注記を更新（RT-16消化を反映）。準拠をv2.2へ更新、Status=Reviewed（DoD-1対応） |
+| v0.3 | 2026-08-11 | 是正パスR3（22番§1・オーナー条件付き承認〔14番§8〕）。A-06: QT-12を「Reference Set確定は必須（全Tier共通）。Golden Sample要否は構成ルールによる」へ文言修正（G-02改訂=Approved Production Reference Set方式との整合）。A-13: Packagingを第6 Quality Dimensionとして正式化（§0.2を6分類へ、§1.3マトリクスへPackaging行追加、QT-19〜21の主帰属を変更。既存パラメータ値・26パラメータ・Q1〜Q4・FIXED MINIMUMは無変更）。22番§12: quality_profilesへのDimension別重点度（H/M/L）・重点CTQ格納の注記を§6.1へ追加。準拠を05 v3.1へ更新 |

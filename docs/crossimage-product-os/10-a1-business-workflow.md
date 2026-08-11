@@ -3,10 +3,10 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| 版 | v0.4 |
-| 日付 | 2026-08-10 |
+| 版 | v0.5 |
+| 日付 | 2026-08-11 |
 | 作成 | A1 業務設計エージェント（Business Process Architect） |
-| 準拠 | 05-governance-pack.md v2.2（用語・ID・Status・Task定義15項目・Gate・DNAに完全準拠。G-14/G-15はv1.1裁定、G-16はv2.2裁定を反映済み） |
+| 準拠 | 05-governance-pack.md **v3.1**（用語・ID・Status・Task定義15項目・Gate・DNAに完全準拠。G-14/G-15はv1.1裁定、G-16はv2.2裁定、CustomerDecision / CommercialLoop enum・TYPEコードLOOP・G-02改訂〔Approved Production Reference Set〕はv3.0/v3.1を反映済み） |
 | 依存 | 01-architecture-overview.md / 並行成果物: 11(A2), 12(A5), 13(A6)。related_tables のテーブル名は A3(15番)確定後に統合レビューで整合させる |
 
 ## 0. 設計原則（本書全体に適用）
@@ -59,7 +59,7 @@ Workstream割付の原則: LEAD/PROP/FIN/CMP/RPT→COMMERCIAL、REQ/SPEC(仕様)
 | P-29 | FACTORY | RFQ生成・承認・発行（中国語Excel+WeChatDigest） | JP-RFQ-010〜030 | B / C / A |
 | P-30 | FACTORY | 中国語工場仕様書生成指示 | JP-RFQ-040 | A_FULL_AUTO |
 | P-31 | FACTORY | RFQ督促・Quote取込・比較・交渉準備 | JP-RFQ-050〜080 | A_FULL_AUTO / B |
-| P-32 | FACTORY | 工場PO作成・承認・発行 | JP-PROD-010〜020 | B / C |
+| P-32 | FACTORY | Reference Set確定・工場PO作成・承認・発行 | JP-PROD-005〜020 | C / B / C |
 | P-33 | FACTORY | 生産進捗取込・遅延検知 | JP-PROD-030〜040 | A_FULL_AUTO |
 | P-34 | FACTORY | ECR受付・審査・承認 | JP-PROD-050〜060 | B / C |
 | P-35 | FACTORY | UnauthorizedChange検知対応 | JP-PROD-070 | A_FULL_AUTO |
@@ -78,6 +78,7 @@ Workstream割付の原則: LEAD/PROP/FIN/CMP/RPT→COMMERCIAL、REQ/SPEC(仕様)
 | P-48 | LOGISTICS | ShipmentRelease（出荷承認） | JP-LOGI-030 | C_HUMAN_DECISION |
 | P-49 | LOGISTICS | 通関・納品・完了レポート | JP-LOGI-040〜060 | A_FULL_AUTO |
 | P-50 | QUALITY | Claim（性能主張）候補抽出・実証管理 | JP-QUAL-060〜070 | B_AI_DRAFT |
+| P-51 | COMMERCIAL | Commercial Feasibility Loop（商流成立性の周回: Feasibility分析・顧客Option提案・CustomerDecision取込） | JP-LOOP-010〜030 | A / B / A |
 
 ---
 
@@ -550,8 +551,8 @@ Slice内訳: 20 Task = A:9 / B:6 / C:5 / D:0（A+B=75%。Cの5件は全て承認
 | JP-SMP-020 | サンプル進捗トラッキング・リマインド | SYSTEM | サンプル依頼発行 | A_FULL_AUTO | [] |
 | JP-SMP-030 | サンプル受領・評価記録起票 | QA | サンプル(Vn)到着 | B_AI_DRAFT | [] |
 | JP-SMP-040 | サンプル評価判定ドラフト・確認（項目単位） | QA | 評価記録起票完了 | B_AI_DRAFT | [] |
-| JP-SMP-050 | GoldenSample承認手続（CLIENT/商社/工場3者） | QA | サンプル評価=全項目APPROVED | C_HUMAN_DECISION | [G-02] |
-| JP-SMP-060 | GoldenSample LOCK登録・配布 | SYSTEM | 3者承認完了（FACTORY_ACKNOWLEDGED） | A_FULL_AUTO | [G-02] |
+| JP-SMP-050 | GoldenSample承認手続（CLIENT/商社/工場3者） | QA | サンプル評価=全項目APPROVED **かつ Reference Set構成にGolden Sampleを含む案件のみ生成**（22番§11.4） | C_HUMAN_DECISION | [G-02] |
+| JP-SMP-060 | GoldenSample LOCK登録・配布 | SYSTEM | 3者承認完了（FACTORY_ACKNOWLEDGED）。**GSを要するReference構成の案件でのみ生成**（22番§11.4） | A_FULL_AUTO | [G-02] |
 | JP-SMP-070 | LimitSample登録（外観許容限度） | QA | Q3以上 or BIMP_HIGH以上で外観基準確定 | B_AI_DRAFT | [] |
 | JP-SMP-080 | サンプル輸送トラッキング | SYSTEM | サンプル発送通知受信 | A_FULL_AUTO | [] |
 | JP-QUAL-010 | Quality Profile推奨生成 | QA | ProjectDNA確定 | B_AI_DRAFT | [] |
@@ -565,8 +566,9 @@ Slice内訳: 20 Task = A:9 / B:6 / C:5 / D:0（A+B=75%。Cの5件は全て承認
 | JP-REG-030 | 試験機関手配・進捗管理 | REG | 試験リスト確定 | B_AI_DRAFT | [G-03] |
 | JP-REG-040 | 法規最終判断・Status確定 | REG | 試験結果・書類受領完了 | C_HUMAN_DECISION | [G-03] |
 | JP-REG-050 | 表示・ラベル法規確認 | REG | パッケージ仕様ドラフト完成 | B_AI_DRAFT | [G-03] |
+| JP-PROD-005 | **Reference Set確定**（Approved Production Reference Set〔承認済み量産基準セット〕の構成充足確認・確定。**PO承認の前提**） | QA | 案件の必要構成要素（構成ルール評価結果=production_reference_sets.required_components）の全項目APPROVED到達 | C_HUMAN_DECISION | [G-02] |
 | JP-PROD-010 | 工場PO(発注書)ドラフト生成 | TRADE | 顧客受注確認+量産工場選定完了 | B_AI_DRAFT | [G-01] |
-| JP-PROD-020 | PO承認・発行 | MGR | POドラフト完成 | C_HUMAN_DECISION | [G-01, G-02, G-03] |
+| JP-PROD-020 | PO承認・発行 | MGR | POドラフト完成 **かつ Reference Set=COMPLETE**（JP-PROD-005確定済み） | C_HUMAN_DECISION | [G-01, G-02, G-03] |
 | JP-PROD-030 | 生産進捗取込（WeChat/Excel→構造化） | SYSTEM | 工場/CN_OFFICEから進捗報告受信 | A_FULL_AUTO | [] |
 | JP-PROD-040 | 進捗遅延検知・アラート | SYSTEM | 進捗更新 or 予定日超過 | A_FULL_AUTO | [] |
 | JP-PROD-050 | ECR受付・影響分析ドラフト | PM | 工場/顧客/社内から変更申請 | B_AI_DRAFT | [G-06] |
@@ -595,13 +597,17 @@ Slice内訳: 20 Task = A:9 / B:6 / C:5 / D:0（A+B=75%。Cの5件は全て承認
 | JP-CMP-050 | 市場事故対応（リコール等） | MGR | 市場での安全事故報告 | D_MANUAL_EXCEPTION | [G-04] |
 | JP-CMP-060 | CAPA有効性フォロー・クローズ | SYSTEM | CAPA実施報告受領+検証期間経過 | A_FULL_AUTO | [] |
 | JP-RPT-010 | Repeat受付・前回仕様コピー | SYSTEM | EntryRoute=D判定 | A_FULL_AUTO | [] |
-| JP-RPT-020 | 差分確認質問生成・送信 | SYSTEM | 前回仕様コピー完了 | A_FULL_AUTO | [] |
+| JP-RPT-020 | 再確認8項目チェックリスト生成・差分確認送信 | SYSTEM | 前回仕様コピー完了 | A_FULL_AUTO | [] |
 | JP-RPT-030 | Repeat見積依頼（工場・定型） | SYSTEM | 差分確認完了（仕様変更なし） | A_FULL_AUTO | [G-13] |
 | JP-RPT-040 | Repeat発注承認 | SALES | Repeat見積受領+顧客合意 | C_HUMAN_DECISION | [G-01] |
 
 注: 仕様変更ありのRepeatはJP-REQ-050（差分解析）経由で通常フローの該当Taskのみを再生成する（§4 R-04）。
 
 注（v0.4・C-03/RT-03是正）: JP-FIN-010（受注確認・注文請書発行）およびJP-RPT-040（Repeat発注承認）のoutputsは**顧客受注レコード（15番 `sales_orders`）+ 注文請書Document**であり、G-01「正式発注なし」の判定参照先は「`sales_orders`確定（status=APPROVED∧顧客合意証跡FK）∧ PO=APPROVED以上」（15番§4.1の宣言的条件）である。確定見積（`is_provisional=false`のQuotation）に紐づかない受注登録はDB制約で拒否される（概算価格の確定視=TC-02系の防御）。
+
+注（v0.5・22番A-06/§11・G-02改訂の反映）: JP-PROD-020のガード条件は「GoldenSample=LOCKED」から「**Reference Set=COMPLETE**（`production_reference_sets` 最新版の required_components 全行がAPPROVED）」へ差替えた。Golden Sampleは Approved Production Reference Set（承認済み量産基準セット：量産の正となる承認済み基準物の組合せ）の**構成要素の一つ**であり、JP-SMP-050/060 は「GSを要するReference構成の案件でのみ生成」される（Task Generator条件。Repeat・既製品案件では不要なGS作成工程が生成されない）。必要構成の決定ルールは f(OdmLevel × ProductRisk × BrandImpact × Rule Pack供給ルール × Entry Route) の CONFIGURABLE_RULE（22番§11.3、供給は18番 第10要素 REFERENCE_SET）。G-02の宣言的条件データの書換えのみで実装し、Gate機構は無変更。
+
+注（v0.5・22番§16/§19・JP-RPT-020の8項目チェックリスト化）: JP-RPT-020は次の**8項目**の再確認チェックリストを自動生成する — ①工場価格（Quote失効チェック=valid_until）②MOQ（quote_conditions再確認）③材料（供給可否・ECR有無）④納期 ⑤運賃 ⑥為替 ⑦法規（regulatory_assessments自動差戻し判定=既存機構）⑧部品供給可否。各項目に「前回値・現在値・要再確認フラグ」を自動生成し、**変化があった項目だけ**を人間・工場に確認する（A_FULL_AUTO→差分のみB運用）。チェックリスト8項目の構成はCONFIGURABLE_RULE。
 
 注（v0.4・C-09/RT-08是正・物流順序）: JP-LOGI-020は出荷予定確定時点での**暫定ブッキング**（キャンセル可能条件）を許可し、JP-LOGI-010は出荷書類**ドラフトを先行生成**する。ShipmentRelease（JP-LOGI-030、G-03〜G-06）が物理的に停止するのは**船積み実行**（15番§3.10のRELEASED→SHIPPED遷移）であり、暫定ブッキング・書類ドラフト生成は停止対象外。確定版書類・ブッキング確定はRELEASED遷移の副作用として生成する（15番§3.10と整合確認済み）。船腹確保の実務（ブッキングは出荷2〜3週前）と検品→Release承認の直列待ちを分離し、船を逃す構造を解消する。
 
@@ -647,6 +653,75 @@ related_docs: [試験成績書, 版下チェックリスト]
 related_tables: [claims, approvals, documents]
 automation_class: B_AI_DRAFT
 gates: [G-16]
+```
+
+### 3.2 Commercial Feasibility Loop Task定義票（v0.5追加・15項目完全形。22番§6.2 / A-04是正）
+
+Commercial Feasibility Loop（商流成立性の周回：工場回答と顧客判断を往復しながら価格・数量・仕様を成立条件へ収束させる中核Workflow。Governance §16）を業務として回すTask群。各周回は `{ProjectID}-LOOP-{NN}` として追記記録し（上書き禁止）、**1周完結を前提にしない**（ARCHITECTURE_LOCK・22番§19-7）。
+
+> **既存Taskの位置づけ直し（22番§6.2）**: JP-RFQ-060〜080（Quote取込・比較・交渉ポイント抽出）/ JP-PROP-060〜080（Quotation作成・送信・価格交渉）/ JP-FACT-050（量産工場最終選定）は、**Loop配下の工程**として位置づけ直す（Task自体は再利用・分類/定義は現行どおり）。CustomerDecision（Loop分岐：顧客の進め方選択）の各分岐からこれらのTaskが再起票される配線はJP-LOOP-030が担う。
+
+```yaml
+task_id: JP-LOOP-010
+name: Feasibility分析ドラフト（Loop周回分析）
+purpose: 顧客希望（Commercial Profile）と工場回答（Quote版+quote_conditions）の差分・リスク・概算利益・推奨案を自動整理し、人間にExcel比較・転記をさせずLoop判断の材料を揃える（22番§6.2 / §10.2）
+owner_role: AI
+trigger: 全RFQ先のQuote登録完了（JP-RFQ-070比較表生成完了）、または交渉・再RFQ・条件変更後のQuote更新登録
+inputs: [Commercial Profile(最新版), Quote(全版)+quote_conditions, Specification版, Cost Ledger(ESTIMATED費目), commercial_loops(前周回があれば)]
+system_action: commercial_loops周回行の起票（{ProjectID}-LOOP-{NN}採番、OPEN→ANALYZING）、input_snapshotのFK固定（Profile版・Spec版・対象Quote版）、希望vs回答の差分明細（価格・MOQ・納期・仕様・初期費用）の自動算出
+ai_action: feasibility_result（成立/条件付成立/不成立）ドラフト生成、リスク・概算利益（内部のみ）・推奨案+根拠の整理（§10.2の6点セット。22番§10.2）
+human_action: none（判断はJP-LOOP-020以降）
+outputs: [commercial_loops(ANALYZING・feasibility_resultドラフト), Loop判断画面用6点セット]
+approval_required: false
+blocking_condition: Quoteが1件も未登録
+deadline_rule: trigger+2営業時間（自動処理）
+notification: 分析完了→SALES/PMへ（不成立検知時は差分要点付き）
+related_docs: [none]
+related_tables: [commercial_loops, commercial_profiles, quotes, quote_conditions, cost_items]
+automation_class: A_FULL_AUTO
+gates: []
+```
+
+```yaml
+task_id: JP-LOOP-020
+name: 顧客Option提案生成・承認
+purpose: 成立しない場合も単純な「できません」で終わらせず、何を維持し何を変えれば成立するかをOption型（A/B/C…数量優先/価格優先/オリジナル性優先等）で顧客へ提案する（Governance §16のOption型提案原則）
+owner_role: SALES
+trigger: JP-LOOP-010完了（feasibility_result=条件付成立/不成立の場合は再提案型、成立の場合は正式提案型）
+inputs: [commercial_loops(ANALYZING), Commercial Profile(priority_axes含む), Quote比較表, Cost Ledger(概算)]
+system_action: options_presentedの起票、承認画面提示（1画面=1判断。データは画面に集約済み・比較元Excelを開かせない=§10.2受入基準）、承認後の顧客チャネル送信キュー作成
+ai_action: Option案ドラフト生成（各Option: 何を維持し何を変えるか+概算影響。EXP_BEGINNERにはOption数上限=22番P-16低減策・「おすすめ1+代替」原則）、情報遮断スキャン（工場原価・マージン・他工場見積の混入検知）
+human_action: Option内容・価格・利益・重要条件の確認・修正・承認（価格・工場・商社利益を含む正式顧客提案はHuman Approvalを基本とする=Governance §16）
+outputs: [commercial_loops(OPTIONS_PRESENTED), 顧客向けOption提案(承認済・送信・概算明示)]
+approval_required: true（SALES/PM。代理承認者=MGR）
+blocking_condition: feasibility_resultドラフト未生成
+deadline_rule: trigger+1営業日
+notification: 承認待ち→SALES/PM、期限超過→MGRへ、顧客未応答7日→SALESへフォロー提案
+related_docs: [Option提案（顧客向け・G-15の概算明示準拠）]
+related_tables: [commercial_loops, approvals, quotations, notifications]
+automation_class: B_AI_DRAFT
+gates: [G-15, G-16]
+```
+
+```yaml
+task_id: JP-LOOP-030
+name: CustomerDecision取込・Loop記録
+purpose: 顧客選択（CustomerDecision）を構造化取込し、「なぜ条件が変わったか・誰が・どの工場回答を根拠に」を証跡付きでLoop行に記録のうえ、Profile新版化と後続Taskの自動起票を行う
+owner_role: SYSTEM
+trigger: 顧客のOption選択・回答受信（PORTAL/メール/LINE。SALES代行入力を含む）
+inputs: [commercial_loops(OPTIONS_PRESENTED), 顧客回答（選択+理由）, decision_evidence(顧客合意証跡Document)]
+system_action: customer_decision確定（ACCEPT/MODIFY/NEGOTIATE/RE_SOURCE/RE_RFQ/HOLD/REJECT）、State遷移（DECIDED→CLOSED。追記型・逆行なし）、commercial_profile_versionsへのスナップショット（loop_id FK・変更理由・根拠Quote版FK）、分岐別後続の自動起票（MODIFY→新Loop行+Profile新版 / NEGOTIATE→JP-PROP-080起票のうえ同Loop工場回答待ち / RE_SOURCE→JP-FACT-010再実行+新Loop / RE_RFQ→JP-RFQ系再生成+新Loop / HOLD→Project ON_HOLD連動 / ACCEPT→JP-PROP-060確定見積・受注経路へ）
+ai_action: 自由文回答の構造化（曖昧回答は確認質問を再生成）、trigger_reason（条件変更理由）ドラフトの記録
+human_action: none（HOLD/REJECT時の折衝・例外対応は既存C/D分類Taskで実施）
+outputs: [commercial_loops(DECIDED→CLOSED), commercial_profile_versions(新版), 後続Taskセット]
+approval_required: false（正式提案の承認はJP-LOOP-020で完了済み）
+blocking_condition: decision_evidence未添付（顧客合意証跡なしの確定登録は不可）
+deadline_rule: 回答受信+10分（自動処理）
+notification: DECIDED→SALES/PMへ（分岐内容付き）、REJECT→MGRへ
+related_docs: [顧客合意証跡Document]
+related_tables: [commercial_loops, commercial_profile_versions, tasks, audit_logs]
+automation_class: A_FULL_AUTO
+gates: []
 ```
 
 ---
@@ -706,12 +781,13 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 
 ## 6. Automation Matrix 集計
 
-対象: 本書で定義した日本側テンプレートTask全91件（§2の20件 + §3の71件。v0.4でJP-QUAL-060/070〔Claim管理・C-04〕を追加）。
+対象: 本書で定義した日本側テンプレートTask全95件（§2の20件 + §3の75件。v0.4でJP-QUAL-060/070〔Claim管理・C-04〕を追加、**v0.5でJP-LOOP-010/020/030〔Loop系・22番§6.2〕とJP-PROD-005〔Reference Set確定・22番§11.4〕の計4件を追加**）。
 
 | 領域 | A_FULL_AUTO | B_AI_DRAFT | C_HUMAN_DECISION | D_MANUAL_EXCEPTION | 計 |
 |---|---|---|---|---|---|
 | LEAD | 3 | 0 | 2 | 0 | 5 |
 | PROP | 4 | 2 | 2 | 0 | 8 |
+| LOOP | 2 | 1 | 0 | 0 | 3 |
 | REQ | 2 | 2 | 1 | 0 | 5 |
 | SPEC | 1 | 6 | 0 | 0 | 7 |
 | RFQ | 5 | 2 | 1 | 0 | 8 |
@@ -719,16 +795,16 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 | SMP | 4 | 3 | 1 | 0 | 8 |
 | QUAL | 2 | 4 | 1 | 0 | 7 |
 | REG | 0 | 4 | 1 | 0 | 5 |
-| PROD | 4 | 2 | 2 | 0 | 8 |
+| PROD | 4 | 2 | 3 | 0 | 9 |
 | INSP | 2 | 2 | 0 | 0 | 4 |
 | LOGI | 4 | 1 | 1 | 0 | 6 |
 | FIN | 4 | 1 | 0 | 0 | 5 |
 | CMP | 1 | 3 | 0 | 2 | 6 |
 | RPT | 3 | 0 | 1 | 0 | 4 |
-| **合計** | **40 (44.0%)** | **34 (37.4%)** | **15 (16.5%)** | **2 (2.2%)** | **91** |
+| **合計** | **42 (44.2%)** | **35 (36.8%)** | **16 (16.8%)** | **2 (2.1%)** | **95** |
 
-- **A+B = 74/91 = 81.3% ≥ 80%（達成）**。日中全Task合算（IR-13裁定の正式集計単位・14番）では A+B = (74+28)/(91+35) = **102/126 = 81.0% ≥ 80%**（14番IR-13の100/124=80.6%は本書v0.3時点の値。v0.4のClaim管理2Task〔B_AI_DRAFT〕追加後も基準維持を確認=C-04の再集計）
-- C分類15件は全て「承認・重要判断」（Proposal/RFQ/PO承認、DNA・Requirement・Tier確定、工場選定、GoldenSample・ECR・Repeat発注承認、法規最終判断、ShipmentRelease、商談・価格交渉）であり、設計原則「人間は営業・提案・重要判断・承認のみ」に合致。D分類2件は市場事故・重大クレームのみ。
+- **A+B = 77/95 = 81.1% ≥ 80%（維持・達成）**。達成計算（v0.5再集計）: v0.4の A=40/B=34/C=15/D=2（91件）に対し、新Task4件の内訳は JP-LOOP-010（A）/ JP-LOOP-020（B）/ JP-LOOP-030（A）/ JP-PROD-005（C）＝ A+2 / B+1 / C+1。よって A+B = (40+2)+(34+1) = **77/95 = 81.1%**。日中全Task合算（IR-13裁定の正式集計単位・14番。中国側35件はA=3/B=25/C=7で変更なし）では A+B = (77+28)/(95+35) = **105/130 = 80.8% ≥ 80%（基準維持を確認）**。22番§24-⑩「Loop系Task込み再集計（A+B≥80%維持）」の承認条件を充足する。
+- C分類16件は全て「承認・重要判断」（Proposal/RFQ/PO承認、DNA・Requirement・Tier確定、工場選定、GoldenSample・**Reference Set確定**・ECR・Repeat発注承認、法規最終判断、ShipmentRelease、商談・価格交渉）であり、設計原則「人間は営業・提案・重要判断・承認のみ」に合致。D分類2件は市場事故・重大クレームのみ。
 - 翻訳・リマインド・転記・進捗確認・定型文書は全件A（またはB）に分類済み。C/Dに定型作業は含まれない。
 - Vertical Slice単体ではA+B=75%（承認密度が最も高い商流上流のため）。案件ライフサイクル全体で80%超となる構造。初期運用で全件承認としているB/C（JP-REQ-020送信承認、JP-PROP-030全件承認等）は、運用実績蓄積後に自動化率を引き上げる（Translation/Doc Engineの「初回テンプレ承認、以降自動」と同方針）。
 
@@ -736,12 +812,12 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 
 ## 7. Gate参照の整合
 
-本書の各Taskの `gates` はGovernance Pack §9 のv2.2レジストリ（G-01〜G-06, G-10〜G-16）のみを参照している。G-14/G-15はv1.1裁定、G-16はv2.2裁定（A4提案・C-04でTask配線）を反映して該当Taskへ追記済み。参照マップ:
+本書の各Taskの `gates` はGovernance Pack §9 のレジストリ（G-01〜G-06, G-10〜G-16）のみを参照している。G-14/G-15はv1.1裁定、G-16はv2.2裁定（A4提案・C-04でTask配線）、**G-02はv3.0改訂（Approved Production Reference Set方式）をv0.5で反映済み**。参照マップ:
 
 | Gate | 参照Task |
 |---|---|
 | G-01 | JP-PROD-010/020, JP-FIN-010, JP-RPT-040 |
-| G-02 | JP-SMP-050/060, JP-PROD-020 |
+| G-02 | **JP-PROD-005（Reference Set確定）**, JP-SMP-050/060（GSを要するReference構成の案件のみ）, JP-PROD-020 |
 | G-03 | JP-REG-010〜050, JP-PROD-020, JP-LOGI-030 |
 | G-04 | JP-INSP-040, JP-LOGI-030, JP-CMP-040/050 |
 | G-05 | JP-INSP-010/030/040, JP-LOGI-030 |
@@ -751,8 +827,29 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 | G-12 | JP-SPEC-010, JP-PROP-020/060, JP-RFQ-010/020 |
 | G-13 | JP-LEAD-020/030, JP-RFQ-010/020/030, JP-RPT-030 |
 | G-14 | JP-RFQ-030（RFQ発行）, JP-PROP-070（Quotation送信） |
-| G-15 | JP-PROP-060（Quotation承認） |
-| G-16 | JP-PROP-020/040（Proposal生成・送信）, JP-SPEC-060/070（版下・パッケージ）, JP-QUAL-060/070（Claim抽出・実証管理） |
+| G-15 | JP-PROP-060（Quotation承認）, JP-LOOP-020（Option提案の概算明示） |
+| G-16 | JP-PROP-020/040（Proposal生成・送信）, JP-SPEC-060/070（版下・パッケージ）, JP-QUAL-060/070（Claim抽出・実証管理）, JP-LOOP-020（Option提案の性能表現） |
+
+---
+
+## 8. KPI定義（16指標・DoD-11対応。22番§10.3の正式収載）
+
+Automation A+B比率（§6）単独ではなく、以下の**KPI（重要業績評価指標：経営判断に使う測定値）16指標**を計測する。**目標値はすべてCALIBRATION_VALUE（実案件データで校正する数値）**であり、Phase 0では定義と計測方法のみを確定する（Governance §0-8。目標値は実測後にオーナー/MGRが設定）。計測はSystemの自動集計を原則とし、自己申告をさせない。
+
+| KPI | 定義 | 計測方法 |
+|---|---|---|
+| Human Touch Time per Project | 人間（社内Role）が案件に費やした総アクティブ時間 | Task/承認画面の操作イベント（開始〜完了）から自動集計。tasksのIN_PROGRESS区間+approvals判定操作で近似。自己申告させない |
+| Human Decision Count | 案件あたりの人間判断回数 | C/D分類Task完了数 + approvals判定数（audit_logsから導出） |
+| Human Administrative Time | 判断以外の人間作業時間（B分類の修正・手動取込・例外転記） | Touch Time − Decision画面滞在。**設計目標は0への漸近** |
+| Time to First Proposal / Time to First Factory Quote | Lead受付→Proposal送信 / RFQ発行→初回Quote登録 | タイムスタンプ差（projects/proposals/quotes） |
+| RFQ Turnaround / Commercial Loop回数 | RFQ→全Quote回収 / 案件のLoop周回数 | rfq_recipients / commercial_loops |
+| Quote Acceptance Rate / MOQ Acceptance Rate | 提示OptionのACCEPT率 / 工場MOQを顧客が受容した率 | commercial_loops.customer_decision集計 |
+| Estimate vs Actual Cost Variance / Gross Margin Variance | Landed Cost 3段階の乖離 / 見積時vs実績粗利乖離 | landed_cost_snapshots / profitability |
+| Sample Iteration Count / 不良率 / 納期遵守 | サンプル版数 / 検品・市場不良 / ETA遵守 | samples / inspections+feedbacks / shipments |
+| Feedback Rate / Repeat Rate / Version Improvement Rate | 納品後Feedback取得率 / リピート率 / Feedback→Version反映率 | product_feedbacks / Entry Route D / product_versions.addressed_feedback |
+
+- 本表はGovernance DoD-11の16指標（Human Touch Time per Project / Human Administrative Time / Human Decision Count / Time to First Proposal / Time to First Factory Quote / RFQ Turnaround / Commercial Loop回数 / Quote Acceptance Rate / Estimate vs Actual Cost Variance / Gross Margin Variance / MOQ Acceptance Rate / Sample Iteration Count / 不良率 / 納期遵守 / Feedback Rate / Repeat Rate / Version Improvement Rate）を正式収載したものであり、22番§10.3を正とする。
+- 表示層でのKPI名は言語ルール（§14）に従い日本語主表記（例:「案件あたり人間対応時間（Human Touch Time）」）とし、enum・英語名の生表示をしない（19番 表示名マップ）。
 
 ---
 
@@ -771,3 +868,4 @@ Next Best Action Engine は Project全状態を入力に、正常系は自動実
 | v0.2 | 2026-08-10 | 統合レビュー（14番）反映。G-14/G-15正式採用に伴うgates追記（JP-RFQ-030 / JP-PROP-060 / JP-PROP-070）、§7 Gate参照マップをv1.1レジストリへ更新、JP-REG-010のRegulatory遷移記述をA6 §1.5と整合（IR-09）、Status=Reviewed |
 | v0.3 | 2026-08-10 | 是正パス（Governance v2.1）反映。§14言語ルール是正4件（19番§5 #12〜#15: JP-REQ-030/JP-SPEC-010通知文言・JP-RFQ-020承認画面表示規則・JP-LOGI-010帳票名の日本語主表記）、Category-Agnostic注記追加（冒頭・§2）、Task Generator/JP-SPEC-010へのRule Pack供給参照（18番§8.1）。C分類15件の再点検で再分類なし（IR-13裁定・14番参照） |
 | v0.4 | 2026-08-10 | 是正パス（A7条件消化）反映。C-04: G-16のTask配線（JP-PROP-020/040・JP-SPEC-060/070へgates追記、JP-QUAL-060/070を15項目完全形で新設=§3.1、§7参照マップv2.2化、Automation Matrix再集計 A+B=74/91=81.3%・日中合算102/126=81.0%で基準維持）。C-03: JP-FIN-010/JP-RPT-040のoutputsをsales_orders（15番）へ接続（§3注記）。C-09: JP-LOGI-010/020を書類ドラフト先行生成・暫定ブッキング先行可へ変更しShipmentReleaseの停止対象を船積み実行のみと明記（RT-08、§3注記・15番§3.10整合）。準拠をv2.2へ更新 |
+| v0.5 | 2026-08-11 | 是正パスR3（22番§1必要変更の実反映・オーナー条件付き承認〔14番§8〕）。A-04: JP-LOOP-010/020/030を15項目完全形で新設（§3.2。22番§6.2）、既存JP-RFQ-060〜080/JP-PROP-060〜080/JP-FACT-050をLoop配下の工程として位置づけ（§3.2注記）、JP-RPT-020を8項目チェックリスト化（§3注記）。A-06: JP-PROD-005（Reference Set確定・C_HUMAN_DECISION・PO承認の前提）新設、JP-PROD-020ガードを「GS=LOCKED」→「Reference Set=COMPLETE」へ差替え、JP-SMP-050/060へ「GSを要するReference構成の案件でのみ生成」条件を追記（22番§11.4）。A-05: §8 KPI定義（16指標・DoD-11、目標値=CALIBRATION_VALUE）を正式収載。Automation Matrix再集計: A+B=77/95=81.1%・日中合算105/130=80.8%（A+B≥80%維持を確認・達成計算明記）。§7参照マップへG-02改訂/JP-LOOP-020を反映、準拠を05 v3.1へ更新 |
