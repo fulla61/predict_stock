@@ -3,11 +3,11 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| 版 | v0.2 |
-| 日付 | 2026-08-10 |
-| 作成エージェント | A3（DB / ERD Architect） |
-| 準拠 | 05-governance-pack.md v2.2（ID体系§2〔CLM含む〕・Status enum§3・DNA§4・SoT§6・Version§7・Role§8・Gate§9〔G-16含む〕・ハイブリッド運用§11・2層アーキテクチャ§13・言語ルール§14）/ 01-architecture-overview.md / 14-integration-review.md §3（A3引き継ぎ事項・IR-12） / 18-category-rule-packs.md（Rule Packデータモデル） / 17-a7-red-team.md（条件C-02・C-03・C-05・C-09の消化） |
-| 参照 | 10-a1（Task/Gate/承認）/ 11-a2（SpecField Statusマッピング §3.1）/ 12-a5（Excel往復 §2.2/§2.4・Factory Score §7.1）/ 13-a6（Regulatory遷移 §1.5・G-03 §4） |
+| 版 | v0.3 |
+| 日付 | 2026-08-11 |
+| 作成エージェント | A3（DB / ERD Architect）/ 是正パスR1 |
+| 準拠 | 05-governance-pack.md **v3.1**（ID体系§2〔CLM・LOOP・FB・PRD含む〕・Status enum§3〔v3.0 enum群・CommercialLoop含む〕・DNA§4・SoT§6・Version§7・Role§8・Gate§9〔G-02 v3.0改訂・G-16含む〕・ハイブリッド運用§11・2層アーキテクチャ§13・言語ルール§14・§16 Commercial Feasibility Loop・§17 Cost Architecture・§18 Profile分離・§19 Feedback/Evolution/Knowledge）/ 22-final-architecture-review.md §1（A-01/A-03/A-06/A-12）および§5〜§9/§11/§13〜§17の設計案（是正パスR1の作業指示）/ 01-architecture-overview.md / 14-integration-review.md §3（A3引き継ぎ事項・IR-12）・§8（オーナー条件付き承認） / 18-category-rule-packs.md（Rule Packデータモデル） / 17-a7-red-team.md（条件C-02・C-03・C-05・C-09の消化） |
+| 参照 | 10-a1（Task/Gate/承認）/ 11-a2（SpecField Statusマッピング §3.1）/ 12-a5（Excel往復 §2.2/§2.4・Factory Score §7.1）/ 13-a6（Regulatory遷移 §1.5・G-03 §4）/ 23-stress-test.md §7.3（F-1所見: v3.0エンティティ追補の要求） |
 
 本書は Universal Core（カテゴリー非依存の共通基盤：Layer 1）と Category Rule Pack（カテゴリールールパック：カテゴリー差を表現する設定データの束、Layer 2）の2層アーキテクチャを支える正準データ設計である。DDL（データ定義言語：CREATE TABLE等のSQL文）全文は実装フェーズ（A7承認後）の成果物とし、本書はテーブル定義表・制約方針・State Machine（状態遷移機：状態とイベントの遷移規則の定義）を確定する。
 
@@ -189,8 +189,10 @@ erDiagram
 | factory_score_events | — | factory_id, project_id, axis, delta, event_type(G-06発動/CRITICAL不良/納期遵守 等), recovery_eligible_after | factories | 追記専用。**減点即時・回復緩慢の非対称性**をイベント履歴で担保（自動回復させない） |
 | rfqs | `{ProjectID}-RFQ-{NN}` | project_id, spec_version_id(**DRAFT版参照可**＝IR-12), quantity_scenarios JSONB, reply_due, status_derived(発行はapproval+issued_at), issue_approval_id, gate_warns JSONB(G-11/12/13/14のWARN記録) | projects, spec_versions, approvals | public_id UNIQUE |
 | rfq_recipients | — | rfq_id, factory_id, sent_at, sent_channel(EXCEL/WECHAT/PORTAL), read_at, responded_at, reminder_count | rfqs, factories | (rfq_id, factory_id) UNIQUE |
-| quotes | `{ProjectID}-QT-{NN}` | rfq_id, factory_id, currency, price_tiers JSONB, tooling_cost, sample_fee, moq, lead_time_days, payment_terms, valid_until, required_docs_status JSONB(A6§3.6書類の有無＝比較評価軸: IR-05), source_document_id(返信Excel原本) | rfqs, factories, documents | public_id UNIQUE。**CLIENT/FACTORY遮断ビューに一切露出しない**（§7） |
-| quotations | `{ProjectID}-QO-{NN}` | project_id, version_no, based_on_quote_ids JSONB(空=G-15概算), is_provisional bool(**G-15: trueなら「概算」透かし強制**), lines JSONB, margin(内部のみ), approval_id, sent_at | projects, approvals | public_id UNIQUE。**FACTORY遮断ビューに露出しない**（顧客販売価格） |
+| quotes | `{ProjectID}-QT-{NN}` | rfq_id, factory_id, **version_no, supersedes_quote_id（版連鎖。v0.3・22番A-03）**, currency, price_tiers JSONB, tooling_cost, sample_fee, moq（**v0.3で「代表値（表示用導出値）」へ降格。SoT（正となるデータ）はquote_conditions。カラム自体は互換のため廃止しない**）, lead_time_days, payment_terms, **前提条件9点（Governance §16列挙の明示カラム化）: qty_assumption（数量前提）/ spec_version_id FK / fx_currency + fx_rate + fx_base_date（為替: 通貨+レート+基準日）/ freight_assumption（運賃前提）/ duty_assessment_id FK（関税前提。§2.15.3）/ valid_until / incoterms / delivery_place（納品地）/ included_cost_item_keys・excluded_cost_item_keys JSONB（含む費用・含まない費用: cost_item_catalog参照の2リスト）**, required_docs_status JSONB(A6§3.6書類の有無＝比較評価軸: IR-05), source_document_id(返信Excel原本) | rfqs, factories, spec_versions, duty_assessments, documents | public_id UNIQUE。**(rfq_id, factory_id, version_no) UNIQUE + 旧版の上書き・削除禁止**（append-only。承認済み版凍結と同じトリガーパターン=v0.3・A-03）。QuoteのStatus enumは**新設しない**（valid_until + supersedes + 版で表現＝Status新設禁止原則の遵守）。前版比の価格差追跡は導出ビュー **`v_quote_diff`**（単価・MOQ・初期費・納期の差分 + 差異原因タグ〔数量変更/仕様変更/為替/材料/交渉/その他〕。原因タグは取込時AIドラフト→人間確認）。valid_until超過QuoteはNext Best Actionが検知し再見積提案（失効管理。TC-61恒久対策と同根）。**CLIENT/FACTORY遮断ビューに一切露出しない**（§7） |
+| quote_conditions | — | quote_id(親Quote版FK。**版が変われば条件も新行**), condition_type(`MOQ / PRICE_TIER / TOOLING / SAMPLE_FEE / LEADTIME / PAYMENT / OTHER`), moq_dimension_id(moq_dimensionsマスタ参照), threshold_qty / value / unit / currency（例〔例であり仕様ではない〕:「色ごと1,000個以上」「3,000個で単価▲8%」）, applies_to_spec_ref(条件が依存する仕様参照: spec_field_key等), notes_ja / notes_zh(工場原文の要旨。原本はdocument保存) | quotes, moq_dimensions | 追記専用（v0.3・A-03新設）。**原則（ARCHITECTURE_LOCK）: MOQ（最小発注数量：工場が受けられる最低ロット）・価格はFactoryの固定属性としてどのテーブルにも持たず、`Factory × Requirement Version × Specification Version × Quote Version` に紐づくCommercial Condition（商業条件：その見積の前提でのみ有効な条件）として保持**（Governance §16）。顧客表示は情報遮断ビュー経由のみ（Quotation化した条件のみ） |
+| moq_dimensions | — | code, name_ja / name_zh, is_active | — | code UNIQUE。**CONFIGURABLEマスタ**（初期シード: per Order / per SKU / per Color / per Size / per Material / per Packaging / Custom Mold起工数量。追加はデータ登録のみ＝Governance変更不要。22番§7） |
+| quotations | `{ProjectID}-QO-{NN}` | project_id, version_no, based_on_quote_ids JSONB(空=G-15概算), **based_on_loop_id, based_on_landed_cost_snapshot_id（v0.3追加: どのQuote版・どのLoop・どのLanded Cost版に基づくかのFK。22番§9。既存版管理〔QO-NN + is_provisional + G-15透かし〕はそのまま）**, is_provisional bool(**G-15: trueなら「概算」透かし強制**), lines JSONB, margin(内部のみ), approval_id, sent_at | projects, commercial_loops, landed_cost_snapshots, approvals | public_id UNIQUE。**FACTORY遮断ビューに露出しない**（顧客販売価格） |
 
 ### 2.5 サンプル・品質（Sample / GoldenSample / Quality）
 
@@ -219,7 +221,7 @@ erDiagram
 **イミュータブル性のDB保証（3層）**:
 1. `BEFORE UPDATE` トリガー: `status='LOCKED'` の行への更新は、「`LOCKED→SUPERSEDED` への遷移で、かつ `superseded_by_id`・`supersede_ecr_id`（承認済みECR）・実行者記録のみを設定する更新」以外を**例外送出で全拒否**。値・写真・承認FKの書き換えは物理的に不可能。
 2. `BEFORE DELETE` トリガー + アプリDBロールからの `DELETE` 権限REVOKE: 物理削除不可。Soft Deleteも `LOCKED/SUPERSEDED` 行には不可（トリガーで拒否）。
-3. **変更は新Version行の生成のみ**: 新行 `version_no+1` を `DRAFT` で作成し3者承認をやり直す（`{ProjectID}-GS-{NN}` は新番号採番）。旧行は手順1の遷移で `SUPERSEDED` になる。G-02はプロジェクトの「最新版がLOCKEDであること」を参照する。
+3. **変更は新Version行の生成のみ**: 新行 `version_no+1` を `DRAFT` で作成し3者承認をやり直す（`{ProjectID}-GS-{NN}` は新番号採番）。旧行は手順1の遷移で `SUPERSEDED` になる。G-02は（v0.3・22番A-06改訂後は）`production_reference_sets` 経由で参照する: golden_samplesは **component_type=GOLDEN_SAMPLE の実装**としてそのまま使われ、Reference SetがGSを要求する構成の案件では従来同様「プロジェクトの最新版がLOCKEDであること」が当該構成要素のAPPROVED条件となる（§2.15.4/§4.1。本イミュータブル機構自体は無変更で流用）。
 
 ### 2.6 法規・変更管理（Regulatory / ECR）
 
@@ -238,7 +240,7 @@ erDiagram
 | inspections | `{ProjectID}-INS-{NN}` | project_id, lot_id, plan_id, stage(IPQC/FIRST_ARTICLE/PRE_SHIPMENT), result(**Approval enumを流用**: PENDING=未判定/APPROVED=合格/REJECTED=不合格/CONDITIONAL=特採※MGR承認必須), sample_size, defect_summary JSONB, report_document_id, inspector_role, result_approval_id | projects, production_lots, inspection_plans, documents, approvals | public_id UNIQUE。**再検査は新行**（結果の上書き禁止）。REJECTED未処理でG-05 |
 | inspection_defects | — | inspection_id, severity(**Defect enum: CRITICAL/MAJOR/MINOR**), item_key, qty, photos JSONB, disposition(返工/選別/特採/廃棄) | inspections | CRITICAL>0 で自動的にG-05 BLOCK証跡 |
 | shipments | `{ProjectID}-SHP-{NN}` | project_id, lot_ids JSONB, status(**§9提案-4**), release_approval_id(**Portal上のApprovalのみ有効＝12番§2.1-2**), booking JSONB, etd, eta, container_photos(document参照) | projects, approvals | public_id UNIQUE。**RELEASED遷移はrelease_approval_id必須+G-03/04/05/06全PASSをトリガー検証** |
-| imports | — | shipment_id, customs_status_dates JSONB, import_notification JSONB(食品等輸入届出: 届出番号・届出済証document_id), duty_amounts | shipments, documents | 食品接触案件は届出済証FKなしで通関完了登録不可（CHECK、13番§3.4） |
+| imports | — | shipment_id, customs_status_dates JSONB, import_notification JSONB(食品等輸入届出: 届出番号・届出済証document_id), duty_amounts（**v0.3注記〔22番A-12〕: 関税・輸入消費税のACTUAL（通関実績額）の置き場。確度管理〔候補→確定〕のSoTは`duty_assessments`（§2.15.3）であり、duty_status=ACTUAL確定時に本カラムと照合する**） | shipments, documents | 食品接触案件は届出済証FKなしで通関完了登録不可（CHECK、13番§3.4） |
 | deliveries | — | import_id, project_id, delivered_at, received_by, delivery_report_document_id | imports, projects | — |
 | invoices | — | project_id, direction(顧客請求/工場支払), amount, currency, milestone, issued_at, due_date | projects | 状態は導出（issued/paid=payments突合） |
 | payments | — | invoice_id, paid_at, amount, method, matched_by | invoices | 追記専用（消込の取消は逆仕訳行） |
@@ -330,9 +332,101 @@ erDiagram
 
 | テーブル | 主要カラム | 制約 |
 |---|---|---|
-| id_sequences | scope_type(PROJECT/FACTORY/GLOBAL), scope_id, type_code(RFQ/QT/QO/SMP/GS/ECR/PO/LOT/INS/SHP/CMP/CAPA/DOC/**CLM**/TSK/AUD…), last_no | (scope_type, scope_id, type_code) UNIQUE。**単調増加のみ**（採番関数は `last_no+1` の返却しかできない＝再利用・欠番詰め直しの構造的禁止。Governance §2。CLMはv2.2採用TYPEコード=C-02） |
+| id_sequences | scope_type(PROJECT/FACTORY/GLOBAL), scope_id, type_code(RFQ/QT/QO/SMP/GS/ECR/PO/LOT/INS/SHP/CMP/CAPA/DOC/**CLM**/**LOOP**/**FB**/TSK/AUD…、GLOBAL採番の**PRD**), last_no | (scope_type, scope_id, type_code) UNIQUE。**単調増加のみ**（採番関数は `last_no+1` の返却しかできない＝再利用・欠番詰め直しの構造的禁止。Governance §2。CLMはv2.2採用、**LOOP/FBおよびProduct `PRD-{NNNN}`〔scope_type=GLOBAL〕はv3.1採用TYPEコード**） |
 
-**テーブル数: 64**（ビュー・パーティションを除く。v0.2で `claims`〔C-02〕・`sales_orders`〔C-03〕を追加）。
+### 2.15 v3.0 実商流テーブル群（v0.3追加・22番A-01）
+
+22番§5〜§8/§11/§13〜§16の設計案の実反映（23番F-1所見の消化）。**既存表の削除・破壊的変更はなく、全て追加型**である（既存表への変更は quotes 版管理拡張〔§2.4・A-03〕、gate_definitions のG-02条件データ書換え〔§4.1・A-06〕、imports の注記〔§2.7・A-12〕のみ）。
+
+#### 2.15.1 Commercial Profile（商業条件プロファイル：この案件が商業的に成立する条件。Governance §18・22番§5）
+
+| テーブル | public_id | 主要カラム | FK | ユニーク/制約 |
+|---|---|---|---|---|
+| commercial_profiles | — | project_id, budget_status(**BudgetStatus enum**: `UNKNOWN`でも案件開始可＝必須入力にしない), target_unit_price / max_unit_price / total_project_budget / benchmark_ref(「競合品◯円」等の参照情報。document参照可。budget_statusに応じ該当欄のみ使用), quantity_status(**QuantityStatus enum**: `FLEXIBLE_BASED_ON_MOQ`＝工場MOQを見て顧客が数量を決める前提を第一級で表現), target_quantity / min_desired / max_acceptable / annual_forecast / trial_lot_qty(quantity_statusに応じ使用), acceptable_moq_max + acceptable_moq_dimension_id(顧客が受け入れられるMOQ上限。次元はmoq_dimensionsマスタ参照〔§2.4〕), target_delivery(date + flexibility区分。**「特に急がない」を正の値として保持しNULL=未入力と区別**), priority_axes JSONB(価格/MOQ/品質/開発力/納期の顧客優先順位。Loop Option生成・工場評価の重み入力), initial_investment_tolerance(金型〔Tooling：成形用の型〕・治具・試験費等の初期投資許容度。レンジor区分・`TBD`可), incoterms_pref / delivery_point_pref(Incoterms〔貿易条件：費用と危険の分岐点の国際規則〕・納品先の希望。確定は§2.15.6のdelivery_terms), 各項目`_status`(SpecField enum流用: AI_SUGGESTED/PROVISIONAL/CONFIRMED/UNKNOWN＝**顧客明言かAI推定かを常に区別**・新enum不要) | projects, moq_dimensions | project_id UNIQUE（1:1）。SpecFieldのquantity等は本Profileへの**参照に一本化し二重入力をスキーマで禁止**（22番§5・P-15の実装受入基準） |
+| commercial_profile_versions | — | profile_id, version_no, loop_id(Loop周回FK), snapshot JSONB(全フィールドの凍結コピー), changed_by, change_reason, basis_quote_id(根拠Quote版FK) | commercial_profiles, commercial_loops, quotes, users | (profile_id, version_no) UNIQUE。**追記専用**（各CustomerDecision確定時のスナップショット。上書き・削除禁止＝「予算・数量が途中で変わった」ことを**正常な商流イベントとして履歴に残す**） |
+
+#### 2.15.2 Commercial Feasibility Loop（商業成立性ループ：要求→工場回答→費用試算→顧客判断を成立まで周回させる中核Workflow。Governance §16・22番§6）
+
+| テーブル | public_id | 主要カラム | FK | ユニーク/制約 |
+|---|---|---|---|---|
+| commercial_loops | `{ProjectID}-LOOP-{NN}`(TYPEコードLOOP=05 v3.1採用) | project_id, loop_no(周回番号), previous_loop_id(前周回への連鎖), status(**CommercialLoop enum: OPEN / ANALYZING / OPTIONS_PRESENTED / DECIDED / CLOSED**〔05 v3.1 §3〕), trigger_reason(初回 / 顧客MODIFY / 工場回答不成立 / 為替・原価変動 / 再Sourcing 等), input_snapshot JSONB(Commercial Profile版・Spec版・対象RFQ/Quote版のFK群＝**誰が・なぜ・どの工場回答を根拠に**の3点をFKで担保), feasibility_result JSONB(成立/条件付成立/不成立 + 差分明細〔希望vs回答: 価格・MOQ・納期・仕様・初期費用〕), options_presented JSONB(提示Option A/B/C…各: 何を維持し何を変えるか・数量優先/価格優先/オリジナル性優先等の型), customer_decision(**CustomerDecision enum: ACCEPT/MODIFY/NEGOTIATE/RE_SOURCE/RE_RFQ/HOLD/REJECT**), decided_by / decided_at / decision_evidence_document_id(顧客操作 or SALES代行入力+顧客合意証跡), approval_id(価格・工場・利益・重要条件を含む正式顧客提案のHuman Approval FK＝§16原則) | projects, commercial_loops(自己参照), approvals, documents, users | public_id UNIQUE。(project_id, loop_no) UNIQUE。**追記型**（周回は上書きでなく新行連鎖＝1周完結を前提とするスキーマの禁止）。State Machineは§3.16 |
+
+#### 2.15.3 Cost Architecture（Governance §17・22番§8）
+
+`cost_ledgers`（project 1:1のコンテナ）+ `cost_items`（明細・追記/版型）+ 参照マスタ `cost_categories`（8分類）+ `cost_item_catalog`（費目シードマスタ・CONFIGURABLE）。
+
+| テーブル | public_id | 主要カラム | FK | ユニーク/制約 |
+|---|---|---|---|---|
+| cost_categories | — | code, name_ja / name_zh, sort_order | — | code UNIQUE。初期8行=§17正準分類（**製造 / 開発・初期 / 品質・試験 / 中国国内 / 国際物流 / 日本輸入 / 日本国内物流 / その他・例外**）。行の追加はGovernance変更手続（参照データ） |
+| cost_item_catalog | — | category_id, item_key, name_ja / name_zh, default_cost_class, default_responsibility, is_internal_only bool(Margin・Fee等の内部専用費目=sensitivity遮断対象), is_active, notes_ja | cost_categories | (category_id, item_key) UNIQUE。**費目シードマスタ（CONFIGURABLE_RULE）**: 追加・無効化はデータ変更のみ＝**固定リスト化の禁止**（§17）。実績が繰り返されたCustom費目の昇格先（Knowledge資産化の一形態）。シードとオーナー指定22費目群の対応は下表 |
+| cost_ledgers | — | project_id, base_currency, notes | projects | project_id UNIQUE（1:1コンテナ。合計・残ESTIMATED件数等の集計は導出ビュー） |
+| cost_items | — | ledger_id, catalog_item_id(NULL可=Custom費目), is_custom bool, category_id, name_ja(Custom時必須), cost_status(**CostStatus enum**), cost_class(**CostClass enum**), cost_responsibility(**CostResponsibility enum**), amount, currency, exchange_rate + rate_base_date, source_ref_table / source_ref_id(Quote版・第三者見積等のFK), evidence_document_id, valid_until, assumption(前提テキスト), confidence, superseded_by_id | cost_ledgers, cost_item_catalog, cost_categories, documents | **金額・前提の変更は新行**（旧行は履歴＝上書き禁止。**「なぜこの金額か」が常にFKと証跡で遡れる**）。CHECK: is_custom=true→name_ja+category_id必須（命名+分類必須） / false→catalog_item_id必須。**必須8属性のスキーマ強制は下記** |
+| duty_assessments | — | project_id, import_id(NULL可。ACTUAL段階でimportsへ接続), hs_code_candidates JSONB(HS Code候補・複数), origin_country(原産国), customs_value(課税価格), rate_candidates JSONB(税率候補), epa_candidates JSONB(EPA・FTA・RCEP〔経済連携協定：関税優遇の可能性〕適用候補), estimated_amount(概算額), duty_status(**DutyStatus enum: AI_ESTIMATE→REVIEW_REQUIRED→BROKER_CONFIRMED→FINAL→ACTUAL**), broker_confirmation_document_id, status_approval_id | projects, imports, documents, approvals | 状態変更は新行（追記型）。**税率・計算方法のハードコード禁止**（マスタ+外部確認）。**AIだけで最終確定しない**: FINAL遷移はBROKER_CONFIRMED経由+承認FK必須（CHECK。13番の免責・責任分界と同一原則）。**importsとの関係（22番A-12）**: 本表が関税の確度管理（候補→確定）のSoT、既存`imports.duty_amounts`は**ACTUAL（通関実績額）の置き場**であり、duty_status=ACTUAL行はimport_id FK+duty_amountsとの照合を必須とする |
+| landed_cost_snapshots | — | project_id, stage(**ESTIMATED / CONFIRMED / ACTUAL の3段階**), taken_at, total_amount, base_currency, breakdown JSONB(cost_items参照リスト), basis_loop_id, basis_quote_ids JSONB | projects, commercial_loops | 追記専用。Landed Cost（着地原価：顧客指定納品地点までの総原価）を3段階保存し比較可能にする（Estimate vs Actual Variance KPIの入力）。見積構造 `Factory Quote → Cost Ledger → Estimated Landed Cost → Crossimage Margin/Fee → Client Quotation` の中間成果物。**Clientに工場原価・マージン・他工場見積・内部リスクコストを出さない遮断は既存3層防御をそのまま適用**（sensitivity=COST/MARGIN。§7） |
+
+**費目シード対応表（8分類シード × オーナー指定の最低22費目群）**: 22番§8.1の8分類シードに加え、オーナー指定の22費目群がすべて `cost_item_catalog` シード（+Custom機構）でカバーされることを下表で明示する。シード細目は**CONFIGURABLE_RULEのデータ整備**で行い固定リスト化しない（§17）。本表の網羅をPhase 1データ整備の受入基準とする。
+
+| # | オーナー指定費目群 | 8分類（cost_categories） | cost_item_catalogシード（例。追加・無効化はデータ変更のみ） |
+|---|---|---|---|
+| 1 | 商品・製造費 | 製造 | 製品単価（数量段階別）/ 材料費内訳 / 加工・組立 / 不良・歩留引当 |
+| 2 | 開発費 | 開発・初期 | 設計・開発費 |
+| 3 | CAD・Design費 | 開発・初期 | 設計・図面（CAD/Design） |
+| 4 | 金型・治具・版代 | 開発・初期 | 金型（Tooling）/ 治具 / 印刷版・版下 |
+| 5 | Sample・Prototype費 | 開発・初期 | サンプル費 / Prototype（試作）費 |
+| 6 | 試験・検査・認証費 | 品質・試験 | 法規試験 / 性能・耐久試験 / 検品費（現地・第三者）/ 工場監査 / 限度見本作成 / 初回認証取得 |
+| 7 | 中国国内物流 | 中国国内 | 工場→港内陸輸送 / 中国側倉庫 / 輸出梱包 |
+| 8 | 輸出関連費 | 中国国内 | 輸出通関・港湾諸掛（中国側） |
+| 9 | 国際物流費 | 国際物流 | 海上・航空運賃 / 燃油等サーチャージ / コンテナ諸費 |
+| 10 | 保険 | 国際物流 | 貨物保険 |
+| 11 | 関税 | 日本輸入 | 関税（duty_assessments連動） |
+| 12 | 輸入消費税 | 日本輸入 | 輸入消費税 |
+| 13 | 通関関連費 | 日本輸入 | 通関手数料 / 輸入届出・検疫（食品接触等該当時） |
+| 14 | 港湾・ターミナル・書類費 | 日本輸入 | 港湾諸掛 / ターミナル費 / 書類作成費（シード追加） |
+| 15 | 保税・保管・Demurrage等例外費 | その他・例外 | 保税・一時保管 / Demurrage（超過保管・滞船料：コンテナ等の無料期間超過で発生する追加費用）・Detention（シード追加） |
+| 16 | 日本国内物流費 | 日本国内物流 | ドレージ（コンテナ陸送）/ 国内配送 / 配送付帯（時間指定等） |
+| 17 | 倉庫・再梱包・流通加工費 | 日本国内物流 | 国内保管 / 再梱包・流通加工（シード追加） |
+| 18 | 送金・銀行手数料 | その他・例外 | 送金・銀行手数料（シード追加） |
+| 19 | 為替差 | その他・例外 | 為替影響（為替差損益） |
+| 20 | 再検品・Rework・Replacement・Reshipment等例外費 | その他・例外 | クレーム・リワーク引当 / 再検品 / Replacement・Reshipment（交換・再出荷）/ 特急対応 / 廃棄 |
+| 21 | CrossimageのMargin・Fee | （内部専用） | catalog上は `is_internal_only=true` の内部費目として保持（見積構造上はCost Ledgerの外側の`Crossimage Margin/Fee`層。既存`quotations.margin`と整合させ、sensitivity=MARGINで遮断） |
+| 22 | Custom Cost Item | （catalog外） | `cost_items.is_custom=true` の自由費目行（案件単位で追加可能。命名+分類必須）。実績反復でマスタへ昇格 |
+
+**Cost Item必須属性8種のスキーマ強制（§17完全準拠）**: 以下8種は `cost_items` のスキーマ上**必須（NOT NULL / CHECK）**とし、空欄・暗黙NULLでの登録を拒否する。不明・未定は暗黙の空欄ではなく**明示値**で登録する（例: cost_responsibility=`TBD`、valid_until=「期限なし」区分値、assumptionに前提記述）:
+① **CostStatus**（`ESTIMATED / AI_ESTIMATED / FACTORY_QUOTED / THIRD_PARTY_QUOTED`〔QUOTED系〕 `/ CONFIRMED / INVOICED / PAID / ACTUAL`。**見積と実績の混同をenumで構造的に禁止**） ② **Currency** ③ **Exchange Rate**（+基準日） ④ **Source・Evidence**（source_ref FK / evidence_document_id。ESTIMATED段階はassumption根拠の明示で代替可＝根拠ゼロ登録の禁止） ⑤ **Valid Until** ⑥ **Assumption** ⑦ **CostResponsibility** ⑧ **CostClass**。
+
+#### 2.15.4 Production Reference Set（承認済み量産基準セット：量産の正となる承認済み基準物の組合せ。G-02判定対象。22番§11）
+
+| テーブル | public_id | 主要カラム | FK | ユニーク/制約 |
+|---|---|---|---|---|
+| production_reference_sets | — | project_id, version_no, required_components JSONB(**本案件が要求する構成要素リスト＝Reference Set構成決定ルール〔CONFIGURABLE_RULE: `f(OdmLevel × ProductRisk × BrandImpact × Rule Pack供給ルール × Entry Route)`。22番§11.3〕の評価結果スナップショット**), completeness(導出: required_components全行APPROVEDか), supersede_ecr_id, superseded_by_id | projects, ecrs | (project_id, version_no) UNIQUE。**変更はECR経由の新版**（イミュータブル版管理パターンを流用）。初期構成ルールは保守側（現行GS必須相当）から開始し、緩和方向はMGR承認必須（22番P-14） |
+| reference_items | — | set_id, component_type(**G-02の8構成要素: `GOLDEN_SAMPLE / APPROVED_SPECIFICATION / APPROVED_DRAWING / APPROVED_BOM / APPROVED_ARTWORK / APPROVED_COLOR_SAMPLE / APPROVED_PACKAGING / PREVIOUS_APPROVED_PRODUCTION`**〔Governance §9 G-02〕), target_ref_table / target_ref_id(polymorphic参照: golden_samples・spec_versions・documents等), approval_id(承認FK), factory_ack_document_id(工場承諾証跡=签回document) | production_reference_sets, approvals, documents | (set_id, component_type, target_ref_table, target_ref_id) UNIQUE。**APPROVED判定＝approval_id非NULL**（G-02評価の参照先。§4.1）。**既存`golden_samples`（3者承認・LOCK・イミュータブル3層保証・ECR経由SUPERSEDED）はそのまま component_type=GOLDEN_SAMPLE の実装として使う**（機構変更なし・現物照合・双方保管の思想も不変。22番§11.4） |
+
+#### 2.15.5 Product / Product Version / Product Feedback（納品後継続。Governance §19・22番§14/§15）
+
+| テーブル | public_id | 主要カラム | FK | ユニーク/制約 |
+|---|---|---|---|---|
+| products | `PRD-{NNNN}`(グローバル採番。TYPEコードPRD=05 v3.1採用) | client_id, name, first_project_id(初出案件) | clients, projects | public_id UNIQUE。**顧客の商品アイデンティティ（project横断）**。Project=CLOSED_WONでも生き続け、Feedback・Repeat・Version Upの起点になる（**納品はProjectの終了ではない**=Governance §0-10。Projectライフサイクル§3.1は変更不要） |
+| product_versions | — | product_id, version_label(V1 / V1.1 / V2…), parent_version_id(**系譜**), realized_project_id(実現案件), spec_version_id, bom_ref(spec_fieldsのBOM領域参照), quality_standard_id, factory_id, reference_set_id, actual_landed_cost_snapshot_id, addressed_feedback_ids JSONB(対応したFeedback), change_reason | products, projects, spec_versions, quality_standards, factories, production_reference_sets, landed_cost_snapshots | (product_id, version_label) UNIQUE。差分比較は導出ビュー **`v_product_version_diff`**（仕様差分〔spec_fields比較〕/ BOM差分 / 品質差分 / 工場差分 / コスト差分〔landed actual比較〕/ 対応Feedback / 変更理由＝**§19の7比較軸をFK済みデータから機械生成**〔人間の資料作成ゼロ〕）。V1.1立上げ＝新Project（Entry Route D+仕様変更あり。既存R-04機構流用） |
+| product_feedbacks | `{ProjectID}-FB-{NN}`(TYPEコードFB=05 v3.1採用) | project_id, product_version_id, lot_id(NULL可・Traceability), source(区分マスタ・CONFIGURABLE: CLIENT / END_USER / EC_REVIEW / CN_OFFICE / INTERNAL), feedback_type(**FeedbackType enum**), feedback_cause(**FeedbackCause enum**。原因確定前は`UNKNOWN`で保持＝推測で責任を確定しない。**UNKNOWN≠商社責任**), severity(Defect enum流用), description, evidence_document_ids JSONB(写真・動画document FK。**証跡必須=NOT NULL**), responsibility(原因確定後の責任区分=Complaint根本原因enum流用), action(対応記録), linked_complaint_id / linked_ecr_id / linked_version_id(昇格・反映先への接続) | projects, product_versions, production_lots, complaints, ecrs | public_id UNIQUE。**軽量運用**（承認不要・Task起票のみ＝Crossimageの作業を増やさない）。ProductFeedback=納品後の市場の声すべて（好意的・改善要望含む）の広い入口とし、**責任・是正・賠償を伴う事案はComplaintへ昇格**（linked_complaint_id。既存Complaint進行enum・CAPA・G-04機構で処理＝重複させない）。原因区分と証拠の必須化により「問題が起きた＝Crossimage責任」への**構造的反証**を可能にする（§19） |
+
+#### 2.15.6 納品条件・営業日（22番§13・§17）
+
+| テーブル | public_id | 主要カラム | FK | ユニーク/制約 |
+|---|---|---|---|---|
+| delivery_terms | — | project_id, version_no, incoterms, named_place(指定地), delivery_responsibility_point(**Delivery Responsibility Point〔納品責任分岐点：費用と危険がCrossimageから離れる地点〕の明示記録**), cost_risk_split_note(費用負担・危険負担の分岐説明), scope_exclusions JSONB(マーケティング等のScope外の明文化), approval_id | projects, approvals | (project_id, version_no) UNIQUE（版管理）。**Quotation・sales_orders・posの各incoterms欄は本表へのFK参照に整合させる（SoT一本化。posには既にincoterms列あり＝矛盾なし）**。物流Scope原則「日本国内の顧客指定納品先まで」（Governance §0-7）の案件別変動を本表が吸収 |
+| business_calendars | — | calendar_code(JP / CN), calendar_date, is_business_day, holiday_name | — | (calendar_code, calendar_date) UNIQUE。**CONFIGURABLEデータ**（deadline_rule・SLA・リマインドの営業日計算の参照。17番TC-69対応） |
+
+#### 2.15.7 Knowledge 2表（Phase 1後半＝TBD・骨子のみ）
+
+実績が貯まってから実装する（22番§16・§17「Knowledge 2表はPhase 1後半で可＝TBD」）。以下は**骨子**であり、詳細カラムはPhase 1後半の設計反映で確定する。
+
+| テーブル | public_id | 主要カラム（骨子） | FK | ユニーク/制約 |
+|---|---|---|---|---|
+| client_knowledge | — | client_id, topic(ブランド期待 / 品質嗜好〔Tier実績〕/ 承認傾向〔承認所要時間・差戻し率〕/ 過去問題 / 商流条件実績), value JSONB, basis(**`ACTUAL（実績）/ CONFIRMED（確認済）/ AI_ESTIMATED（推定）` 必須付与**), source_project_id | clients, projects | **Phase 1後半（TBD）**。新Project（Next Product）でDNA初期推定・Reco Engine入力に自動供給。表示は必ず「推定」明示（§19）、**推定値を案件の正式条件に自動昇格させない**（正式条件は常に当該案件のQuote/承認から） |
+| factory_knowledge | — | factory_id, topic(実績由来のMOQ・価格・納期レンジ / 品質実績 / 対応可能工程), value JSONB, basis(同上), source_project_id | factories, projects | **Phase 1後半（TBD）**。Factory Score（12軸・既存）と分離: **Scoreは評価、Knowledgeは推定材料**。案件CLOSED時の実績還流Task（A分類）が供給元。異常値の還流はレビュー付き（22番P-13） |
+
+**テーブル数: 89**（ビュー・パーティションを除く。内訳: 既存69 + v0.3追加20〔本定義18表 = quote_conditions / moq_dimensions / commercial_profiles / commercial_profile_versions / commercial_loops / cost_ledgers / cost_items / cost_categories / cost_item_catalog / duty_assessments / landed_cost_snapshots / production_reference_sets / reference_items / products / product_versions / product_feedbacks / delivery_terms / business_calendars、Phase 1後半TBD骨子2表 = client_knowledge / factory_knowledge〕）。
+※v0.2までの集計値「64」は§2.2〜§2.14の実定義数69と乖離していたため、v0.3で**実数集計へ是正**した（この是正にテーブル定義の追加・削除は含まれない。22番§17の「Phase 1 Minimum ≒ 既存62 + v3.0追加17 = 約79表」の算術とも整合: 69 − Phase 1後送7表 = 62。§10.3参照）。
 
 ---
 
@@ -414,7 +508,7 @@ erDiagram
 
 | 状態 | イベント | 遷移先 | ガード | 副作用 |
 |---|---|---|---|---|
-| DRAFT | PO承認（JP-PROD-020） | APPROVED | MGR Approval + **G-01（顧客正式発注あり＝当該Projectの`sales_orders`確定〔status=APPROVED∧合意証跡FK〕: §2.7・C-03）+ G-02（GS=LOCKED）+ G-03（Regulatory=APPROVED/NOT_APPLICABLE）** + spec_version=APPROVED | — |
+| DRAFT | PO承認（JP-PROD-020） | APPROVED | MGR Approval + **G-01（顧客正式発注あり＝当該Projectの`sales_orders`確定〔status=APPROVED∧合意証跡FK〕: §2.7・C-03）+ G-02（Reference Set=COMPLETE〔production_reference_sets最新版のrequired_components全行APPROVED。v0.3・A-06改訂＝§4.1。GS要否は構成ルールによる〕）+ G-03（Regulatory=APPROVED/NOT_APPLICABLE）** + spec_version=APPROVED | — |
 | APPROVED | 発行（工場送付） | ISSUED | Approval存在をトリガー検証 | Excel出力（APPROVED透かし）、支払マイルストーン生成 |
 | ISSUED | 工場受諾（盖章签回） | FACTORY_CONFIRMED | factory_confirm_document_id | production_lots起票、生产前确认（CN-PROD-010）Task起動 |
 | FACTORY_CONFIRMED | 全Lot出荷・支払完了 | COMPLETED | — | Profitability確定集計 |
@@ -500,7 +594,29 @@ erDiagram
 | PENDING | 実証失敗確定 / 工場非承諾確定（factory_acknowledgement=false） | REJECTED | 理由必須 | 顧客向け表現から自動除外（16番§7.3-3）。**確定後の当該表現使用はG-04系Critical Issueへ昇格**（05 §9 G-16行） |
 | APPROVED / CONDITIONAL / REJECTED | リンク先CTQ選択肢・SpecField変更 | PENDING（差戻し） | SYSTEM自動 | 顧客向け表現の再確認Task生成（16番§7.1-5、JP-QUAL-070再起動） |
 
-**State Machine数: 15**（Project / SpecField / Specification版 / Sample / GoldenSample / ECR / PO / ProductionLot / Inspection / Shipment / Complaint / CAPA / Regulatory / RulePack / Claim）。
+### 3.16 CommercialLoop（v0.3追加。Statusは05 v3.1正準enum＝新設なし）
+
+| 状態 | イベント | 遷移先 | ガード | 副作用 |
+|---|---|---|---|---|
+| OPEN | 分析開始（全Quote登録=JP-RFQ-070比較表完了 等） | ANALYZING | input_snapshot設定（Commercial Profile版・Spec版・対象RFQ/Quote版FK） | JP-LOOP-010 Feasibility分析ドラフト自動生成（A_FULL_AUTO: 希望vs回答の差分・リスク・概算利益・推奨案） |
+| ANALYZING | 分析完了・Option提示承認（JP-LOOP-020） | OPTIONS_PRESENTED | **成立しない場合もOption型提案（「できません」単純回答の禁止）**。価格・工場・利益・重要条件を含む正式顧客提案は**approval_id必須**（Human Approval=Governance §16原則） | 顧客「選べる進め方」画面へOption A/B/C提示。社内はLoop判断画面（6点セット+5ボタン。22番§10.2） |
+| OPTIONS_PRESENTED | CustomerDecision取込（JP-LOOP-030） | DECIDED | decided_by / decided_at / decision_evidence記録（顧客操作 or SALES代行入力+顧客合意証跡document FK） | 下表の分岐副作用（22番§6.1） |
+| DECIDED | 分岐処理の起票完了 | CLOSED | — | commercial_profile_versionsスナップショット（該当分岐時）。全遷移audit_logs記録 |
+| DECIDED | 工場再回答受領（**customer_decision=NEGOTIATEの場合のみ**） | ANALYZING（同Loop内） | 交渉Task起票済み・工場回答document登録 | 再分析。**この戻りはNEGOTIATEの正準分岐副作用（22番§6.1「同Loop内で工場回答待ち→再ANALYZING」）としてのみ許可**し、それ以外の逆行遷移は禁止（判断履歴は追記保持） |
+
+**DECIDED時の分岐副作用（CustomerDecision別。22番§6.1）**:
+
+| CustomerDecision | 副作用 |
+|---|---|
+| ACCEPT | 次工程へ（Quotation確定 / sales_order経路）。Loop=CLOSED |
+| MODIFY | 新Loop行起票（previous_loop_id連鎖）+ Commercial Profile新版（commercial_profile_versions）。当該Loop=CLOSED |
+| NEGOTIATE | 交渉Task起票のうえ**同Loop内**で工場回答待ち→再ANALYZING（上表最終行） |
+| RE_SOURCE | JP-FACT-010再実行 + 新Loop起票。当該Loop=CLOSED |
+| RE_RFQ | JP-RFQ系Task再生成 + 新Loop起票。当該Loop=CLOSED |
+| HOLD | Project=ON_HOLD連動。当該Loop=CLOSED（再開時は新Loop） |
+| REJECT | Project=CLOSED_LOST または代替提案の新Loop起票。当該Loop=CLOSED |
+
+**State Machine数: 16**（Project / SpecField / Specification版 / Sample / GoldenSample / ECR / PO / ProductionLot / Inspection / Shipment / Complaint / CAPA / Regulatory / RulePack / Claim / **CommercialLoop**〔v0.3追加〕）。
 
 ---
 
@@ -516,7 +632,7 @@ Gate Engine（Layer 1）はGateをコードに埋め込まず、本テーブル�
 | name_ja / name_zh | 名称（表示は§14言語ルール準拠） |
 | gate_type | HARD / SOFT |
 | checkpoint_actions JSONB | 停止対象アクションキー（例 `po.issue`, `production.start`, `shipment.release`, `proposal.finalize`, `rfq.issue`, `quotation.send`, `quotation.approve`） |
-| condition JSONB | 宣言的条件（例 G-02: `{subject:"golden_samples", scope:"latest_version", field:"status", op:"!=", value:"LOCKED"}`、G-03: `{subject:"regulatory_assessments", field:"status", op:"=", value:"BLOCKED"}`）。**判定ロジックの複製禁止**（13番§4.3: G-03はRegulatory Statusの参照のみ） |
+| condition JSONB | 宣言的条件（例 G-02〔v0.3・A-06書換え後〕: `{subject:"production_reference_sets", scope:"latest_version", assert:"required_components_all_approved", op:"=", value:false}`＝最新版Setのrequired_componentsに承認FK未充足の行が残る場合BLOCK、G-03: `{subject:"regulatory_assessments", field:"status", op:"=", value:"BLOCKED"}`）。**判定ロジックの複製禁止**（13番§4.3: G-03はRegulatory Statusの参照のみ） |
 | evidence_requirements JSONB | 通過・解除時に必要な証跡（approval種別・document種別） |
 | override_allowed | bool。**HARDは常にfalse**（CHECK: gate_type='HARD' → override_allowed=false） |
 | warn_message_ja | SOFT通過時のWARN文言キー（19番Glossary連携。G-14は未知カテゴリー時の追加文言フラグ: 18番§6） |
@@ -525,6 +641,8 @@ Gate Engine（Layer 1）はGateをコードに埋め込まず、本テーブル�
 初期データ16行 = Governance §9レジストリ（G-01〜G-06, G-10〜G-16）をそのまま格納。**Gateの新設はGovernance変更手続＋本テーブルへの行追加**であり、コード変更を要しない。
 
 **G-01の宣言的条件（C-03）**: 「正式発注なし」の判定は **「当該Projectの`sales_orders`=確定（status='APPROVED' ∧ client_agreement_document_id NOT NULL）かつ `pos`=APPROVED以上」** の否定で評価する（条件例: `{all_of:[{subject:"sales_orders", scope:"project", field:"status", op:"=", value:"APPROVED"},{subject:"pos", scope:"project", field:"status", op:">=", value:"APPROVED"}]}` の不成立→BLOCK）。工場向けPO Statusのみを参照する評価は禁止＝**顧客受注ゼロのまま社内がPOを起こして量産開始できる経路を排除**する。JP-FIN-010/JP-RPT-040のoutputsが`sales_orders`に接続する（10番 v0.4）。
+
+**G-02の宣言的条件（v0.3・22番A-06/§11.2の書換え）**: 条件データを従来の「`golden_samples` 最新版=LOCKED」から「**`production_reference_sets` 最新版の `required_components` 全行が APPROVED（各構成要素に対応する `reference_items.approval_id` 非NULL）**」の否定でBLOCK、へ書き換えた。本改訂は gate_definitions の**条件データ書換えのみ**で実装され、Gate機構のコード変更を要しない（本節冒頭の「Gateはデータ」設計どおり＝22番が確認した改訂コスト最小化の効果）。`golden_samples` は component_type=GOLDEN_SAMPLE の実装としてそのまま位置づけられ（§2.5/§2.15.4）、GSを要求する構成（ODM_3/4・Q3以上等。構成決定ルールはCONFIGURABLE_RULE=22番§11.3）では従来同様「最新GS=LOCKED」が当該構成要素のAPPROVED条件となる。ODM_0既製品・Repeat（Previous Approved Production継承）等では不要なGS新規作成なしでG-02を充足できる（Crossimageの作業減・責任には厳格のまま）。**Claim/G-16行は既存のまま（本改訂での変更なし）**。
 
 **G-16行（v2.2採用・C-02）**: `gate_type=SOFT / checkpoint_actions=["proposal.send","product_page.publish","artwork.approve"] / condition={subject:"claims", scope:"project", field:"evidence_status", op:"!=", value:"APPROVED"}（または factory_acknowledgement=false と矛盾する表現の併存: §2.5 claims表参照） / override=WARN付き進行可（未実証表現へ「実証予定」注記を強制）`。実証失敗確定表現の使用はG-04系Critical Issueへ昇格（§3.15）。
 
@@ -540,7 +658,7 @@ Gate Engine（Layer 1）はGateをコードに埋め込まず、本テーブル�
 |---|---|---|
 | RFQ_READY | RFQ必須SpecField（Rule Pack QuestionListのdisplay_stage=RFQ・BLOCKER対応Field）にUNKNOWNなし / RFQ先工場≥1 / ※G-11/G-12/G-13/G-14はWARNのみ（false化しない） | 「数量が未確定です（概算値で進行可能）」「法規チェック未着手（G-14 WARN）」 |
 | SAMPLE_READY | 仕様の主要FieldがPROVISIONAL以上 / 工場選定済み / Regulatory≠BLOCKED（BLOCKEDは✕。13番§4.2） | 「Regulatory: BLOCKED（是正待ち）」 |
-| PRODUCTION_READY | **G-01: 顧客正式発注あり（`sales_orders`確定=status APPROVED∧合意証跡FK。§4.1）** / **G-02: 最新GoldenSample=LOCKED** / **G-03系: Regulatory ∈ {APPROVED, NOT_APPLICABLE}** / **Specification現行版=APPROVED（IR-12）** / PO承認済み | 「Regulatory: CHECKING（再確認中のため量産開始不可）」「仕様書が承認されていません」 |
+| PRODUCTION_READY | **G-01: 顧客正式発注あり（`sales_orders`確定=status APPROVED∧合意証跡FK。§4.1）** / **G-02: `production_reference_sets`最新版のrequired_components全行APPROVED（v0.3・A-06改訂。GS要否は構成ルールによる）** / **G-03系: Regulatory ∈ {APPROVED, NOT_APPLICABLE}** / **Specification現行版=APPROVED（IR-12）** / PO承認済み | 「Regulatory: CHECKING（再確認中のため量産開始不可）」「仕様書が承認されていません」「量産基準セット（Reference Set）に未承認の構成要素があります」 |
 | SHIPMENT_READY | Regulatory ∈ {APPROVED, NOT_APPLICABLE} / **G-04: Critical Issue=0** / **G-05: 出货检验=APPROVED（REJECTED未処理なし）** / **G-06: 無断変更疑義なし（未解決ECRなし）** | 「出荷検品が不合格のままです（返工後の再検品待ち）」 |
 
 - 不足理由リストは `missing_reasons` JSONBに「日本語文言キー + 対象エンティティ参照」で格納し、表示層が19番Glossaryで平易文に展開する（内部Status名を顧客に生で見せない: 11番§7準拠）。
@@ -669,9 +787,67 @@ Governance §3「Status新設禁止・提案制」に基づく起案（起案時
 
 ---
 
+## 10. Phase 1 Minimum Schema と実装区分（v0.3追加・オーナー条件8・9・10）
+
+### 10.1 方針: Architecture存在とMVP実装の分離
+
+本書の全89表は**Architectureの正準定義**であり、「本書に定義が存在すること」と「Phase 1で実装すること」を分離する。**約79表のPhase 1 Minimum Schemaを含め、定義済みテーブルを無条件で全実装しない**。各テーブルは以下3区分のいずれかに属し、実装対象はMinimum Schemaから開始して発生事象・実績に応じて広げる:
+
+| 区分 | 意味 |
+|---|---|
+| **MVP必須（Phase 1 Minimum Schema）** | Phase 1 Vertical Slice（22番§18「顧客相談→…→Feedback」1本・Loop最低2周）を通すのに必要な最小集合＝**約79表** |
+| **Architecture定義のみ（Phase 1では実装しない）** | 正準定義として本書に存在するが、発生事象（Feedback昇格・量産中変更・監査運用）が生じるまで実装を後送する |
+| **Phase 1後半** | 実績データが貯まってから実装する（Knowledge 2表＝TBD骨子） |
+
+### 10.2 Phase 1 Minimum Schema（22番§17の正式再掲・約79表）
+
+| 群 | テーブル（**太字=v3.0追加分**） | 数 |
+|---|---|---|
+| 基盤 | clients, contacts, projects, project_dna(+history), users, id_sequences | 7 |
+| 要求・仕様 | requirements, questions, proposals, specifications, spec_versions, spec_fields | 6 |
+| 工場・見積 | factories, factory_scores（手動5軸）, rfqs, rfq_recipients, quotes, **quote_conditions**, quotations, sales_orders | 8 |
+| 商流Loop | **commercial_profiles(+versions), commercial_loops** | 3 |
+| 費用 | **cost_ledgers, cost_items, cost_categories, cost_item_catalog, duty_assessments, landed_cost_snapshots** | 6 |
+| 品質・サンプル | quality_profiles, quality_standards, inspection_plans, samples, sample_evaluations, golden_samples, **production_reference_sets, reference_items**, claims（簡易運用） | 9 |
+| 法規 | regulatory_assessments | 1 |
+| 発注・生産・物流 | pos, production_lots, inspections, inspection_defects, shipments, imports, deliveries, **delivery_terms**, invoices, payments | 10 |
+| 納品後 | **product_feedbacks, products, product_versions** | 3 |
+| 横断 | documents, document_versions, tasks, task_templates, task_dependencies, gate_definitions, gate_evaluations, readiness_snapshots, approvals, audit_logs, notifications, activity_timeline | 12 |
+| 権限 | roles, permissions, role_permissions, user_roles, project_members | 5 |
+| Rule Pack層 | category_rule_packs, rule_pack_versions, rule_records, attribute_tags, attribute_rule_sets(+versions), project_attributes, project_rule_evaluations | 8 |
+| 暦 | **business_calendars**（JP/CN営業日。17番TC-69対応） | 1 |
+
+**Phase 1最小 = 約79表**（22番§17）。`moq_dimensions`（quote_conditions・commercial_profilesの参照マスタ。§2.4）は同§17の「+マスタ」としてMinimum Schemaに含めて実装する。算術整合: 既存69表 − Phase 1後送7表（§10.3）= 62表、+ v3.0追加17表 = 79表（+moq_dimensionsマスタ）。
+
+### 10.3 テーブル区分一覧（「区分」列）
+
+| 区分 | テーブル | 備考 |
+|---|---|---|
+| MVP必須（Phase 1 Minimum Schema） | §10.2の全表（約79表 + moq_dimensionsマスタ） | Vertical Slice 1本通しに必要な最小集合 |
+| Architecture定義のみ（Phase 1では実装しない） | complaints, capas | ProductFeedbackからのComplaint昇格事案が発生するまで後送（claims〔性能主張・簡易運用〕は別物でMinimumに含む） |
+| Architecture定義のみ（Phase 1では実装しない） | ecrs | 量産中変更が発生するまで後送。**ただしスキーマは先行作成推奨**（22番§17。spec_versions/golden_samples/production_reference_setsのECR承認FKの参照先のため） |
+| Architecture定義のみ（Phase 1では実装しない） | factory_records, factory_score_snapshots, factory_score_events | 工場監査運用開始まで後送（factory_scores手動5軸はMinimumに含む） |
+| Architecture定義のみ（Phase 1では実装しない） | comments | — |
+| Phase 1後半 | client_knowledge, factory_knowledge | 骨子のみ定義（§2.15.7・TBD）。実績が貯まってから実装 |
+
+- 「Architecture定義のみ」区分の表も**正準定義・enum・State Machineは本書が保持**する（実装後送であって設計破棄ではない）。実装着手はトリガー事象の発生またはMGR判断による。
+
+## 11. 主要設計判断のLOCK / CONFIGURABLE / CALIBRATION区分（v0.3追加・オーナー条件7）
+
+Governance §0-8の設計要素分類 — `ARCHITECTURE_LOCK`（後から変えると大改修になる構造：Phase 0で確定）/ `CONFIGURABLE_RULE`（管理データとして変更可能）/ `CALIBRATION_VALUE`（実案件データで校正する数値）— を本書の主要設計判断に付す。
+
+| 区分 | 本書の設計判断 |
+|---|---|
+| **ARCHITECTURE_LOCK** | 公開ID+サロゲートキー併用・id_sequences単調増加採番（§0/§2.14）/ **イミュータブル版管理機構**（Spec版・GoldenSample・Quote版・Reference Set・RulePack版・ProductVersion: 上書き禁止・新版行・SUPERSEDED。§2/§3）/ 追記専用監査（audit_logs・ハッシュ連鎖・WORM）+ approvals凍結（§6）/ **Gate機構**（Gateはデータ・Hard/Soft・HARD Override経路の不存在。§4）/ G-02=Approved Production Reference Set方式（§4.1）/ **情報遮断3層**（DBビュー/アプリ/Export。§7）/ カテゴリー固有カラム禁止（§8）/ Commercial Feasibility Loopの第一級Workflow化（LOOP追記記録・1周完結前提のスキーマ禁止。§2.15.2/§3.16）/ MOQ・価格をQuote Versionに従属するCommercial Conditionとして保持＝工場固定属性としてどのテーブルにも持たない（§2.4）/ Cost Ledger構造（8分類+Custom費目+必須8属性+見積/実績のenum分離+Landed Cost 3段階。§2.15.3）/ 納品後継続構造（products・product_versions・product_feedbacksのProject CLOSED後生存。§2.15.5）/ Profile分離6種と相互参照構造（§2.15.1ほか） |
+| **CONFIGURABLE_RULE** | **Reference Set構成決定ルール**（f(OdmLevel × ProductRisk × BrandImpact × Rule Pack × Entry Route)。§2.15.4）/ **費目シードマスタ**（cost_categories配下のcost_item_catalog・Custom費目とその昇格。§2.15.3）/ **MOQ次元マスタ**（moq_dimensions。§2.4）/ Feedback source区分・Complaint昇格条件（§2.15.5）/ 関税率・税計算・HS Code候補・EPA適用マッピング（§2.15.3）/ 営業日カレンダー（business_calendars。§2.15.6）/ Knowledge還流の対象項目（§2.15.7）/ Soft Gateの本数・WARN文言・チェックポイント（§4.1）/ QualityLevelのSoT一本化ルール（DNA軸=参照キャッシュ、正はquality_profiles.tier。22番§3） |
+| **CALIBRATION_VALUE** | KPI 16指標の目標値（Loop回数目安・Human Touch Time・Feedback Rate等。定義は10番/22番§10.3）/ Feedback収集タイミング（納品後30/60日）/ AI推定のconfidence閾値 / 為替バッファ・マージン警告閾値 / MOQ・価格のKnowledge推定レンジ / AQL値・抜取数等のTier数値（数値の正は16番） |
+
+---
+
 ## Change Log
 
 | 版 | 日付 | 変更 |
 |---|---|---|
 | v0.1 | 2026-08-10 | 初版作成（A3）。ERD4面 / テーブル定義62表（公開ID+サロゲートキー方針、spec_fields・golden_samples・approvals・audit_logs・documents・Rule Pack層・RBAC遮断の詳細設計）/ State Machine 14本（IR-12裁定: 产品规格书は単一版系列のDRAFT→APPROVED遷移、RFQはDRAFT添付可・量産はAPPROVED版必須をDB制約化）/ Gate定義のデータ化とReadiness導出 / File・Version管理（「最新版」ファイル名のCHECK禁止）/ Audit Architecture（ハッシュチェーン+WORMアンカー）/ カテゴリー固有カラム禁止の規約 / Governance変更提案5件 |
 | v0.2 | 2026-08-10 | 是正パス（A7条件消化）反映。C-02: `claims`表追加（Claim Ledger=16番§7.1のスキーマ化）・gate_definitions初期データ16行化（G-16行）・id_sequencesへCLM追加・Claim State Machine追加（§3.15、計15本）。C-03: `sales_orders`（顧客受注）追加とG-01宣言的条件の定義（§4.1/§4.3/§3.7、確定見積のみ参照可CHECK）。C-05: §9の5提案を「05 v2.2採用済み」へ更新。C-09: §3.10のRELEASED副作用を暫定ブッキング先行・書類ドラフト先行生成と整合（RT-08）。テーブル数62→64。準拠をv2.2へ更新、Status=Reviewed（DoD-1対応） |
+| v0.3 | 2026-08-11 | **是正パスR1**（オーナー条件付き承認〔14番§8〕のPhase 0 Freeze条件＝22番§1必要変更リストの実反映。23番F-1所見の消化。既存表の削除・破壊的変更なし＝追加型のみ）。**A-01**: v3.0実商流テーブル群を§2.15として追加（commercial_profiles(+versions) / commercial_loops / cost_ledgers / cost_items / cost_categories / cost_item_catalog / duty_assessments / landed_cost_snapshots / production_reference_sets / reference_items / products / product_versions / product_feedbacks / delivery_terms / business_calendars、Phase 1後半TBD骨子=client_knowledge / factory_knowledge）。**A-03**: quotes版管理拡張（(rfq_id,factory_id,version_no)+supersedes_quote_id版連鎖・前提条件9点カラム・moq単一カラムの代表値降格注記・導出ビューv_quote_diff・失効管理）+ quote_conditions / moq_dimensions新設、quotationsへLoop/Landed Cost版FK追加。**A-06**: gate_definitionsのG-02条件を「production_reference_sets最新版のrequired_components全行APPROVED」へ書換え（§4.1/§4.3/§3.7。golden_samplesはcomponent_type=GOLDEN_SAMPLEの実装として位置づけ・Claim/G-16行は既存のまま）。**A-12**: duty_assessmentsとimportsの関係定義（imports.duty_amounts=ACTUALの置き場と注記）。**CommercialLoop State Machine**追加（§3.16・22番§6.1分岐副作用付き。15本→**16本**）。**費目シード対応表**（オーナー指定22費目群×8分類×catalogシード）と**Cost Item必須8属性のスキーマ強制**を明記。**§10 Phase 1 Minimum Schema**（約79表の正式再掲・「約79表を無条件で全実装しない」方針・テーブル区分〔MVP必須/Architecture定義のみ/Phase 1後半〕＝オーナー条件8・9・10)、**§11 LOCK/CONFIGURABLE/CALIBRATION区分**（オーナー条件7）を追加。id_sequencesへLOOP/FB/PRD反映（05 v3.1）。テーブル集計を実数へ是正（旧集計64→実数69）し最終**89表**（うちTBD骨子2）。準拠を05 v3.1へ更新 |
