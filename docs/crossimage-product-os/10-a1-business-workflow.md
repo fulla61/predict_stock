@@ -524,7 +524,7 @@ Slice内訳: 20 Task = A:9 / B:6 / C:5 / D:0（A+B=75%。Cの5件は全て承認
 
 ---
 
-## 3. その他プロセスの簡易Task定義（Vertical Slice外・69 Task）
+## 3. その他プロセスの簡易Task定義（Vertical Slice外・75 Task。§3表72件 + §3.1 Claim管理2件は表と重複掲載 + §3.2 Loop系3件）
 
 | task_id | name | owner_role | trigger | automation_class | gates |
 |---|---|---|---|---|---|
