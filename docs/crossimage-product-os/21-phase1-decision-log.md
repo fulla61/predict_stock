@@ -55,6 +55,8 @@ Phase 1以降も存在し続けるリスク。仕組みではなく運用・契�
 2. Phase 1はVertical Slice（**Loop最低2周**のテストケースを必須に含む。22番§18）を最優先する。
 3. 判断に迷う場合（「これは重大なArchitecture欠陥か、改善アイデアか」）は、オーナー/MGRへ提示して裁定を仰ぎ、裁定結果を本ログへ追記する（勝手なPhase 0編入をしない）。
 4. **Visual Effect（Ambient Particle / WebGL / Audio等の視覚・聴覚演出）を将来実装する場合は、Security / Performance / Accessibility のGateを通す構造とし、Business Logicと分離する**（v1.2追記・オーナー指定〔2026-08-11承認の付帯〕。Backlogルールとして記録）。
+5. **Presentation Layer分離原則（v1.3追記・オーナー指定〔2026-08-11〕）**: 粒子・流体・水面・光・Glass・Ripple・Soundは、Business Architectureと分離した **UI/UX内の Visual Design / Motion Design / Interaction Design / Sound Design Layer（Presentation Layer）** として扱う。**Phase 0 ARCHITECTURE_LOCKの対象にせず、後から継続的に変更可能**とする。Visual EffectはBusiness Logic・State Machine・Data Modelと直接密結合させず、**業務State→Visual LayerへのEvent渡し**（抽象State名のみ。機微データ不可=25番§9.4整合）とし、Visual Effectの変更・削除がBusiness Functionに影響しない構造を必須とする。
+6. **Visual実装順（v1.3追記・オーナー指定）**: (1)本体Frontend Architecture確定 → (2)Visual PoC専用ページ作成〔完了・poc/visual-poc.html〕 → (3)Particle/Flow/Ripple/Orb/Glass/Soundの個別確認〔完了・26番〕 → (4)Visual DirectionのOwner Review → (5)承認後に Design Token / Motion Token 化 → (6)Dashboard・Project等へ段階的展開。**最初のVertical Sliceでは業務機能完成を優先し、Visual PoCは並行レーンで実施する**。
 
 ## 4. Phase 1開始の前提条件（再掲）
 
@@ -80,3 +82,4 @@ Phase 1以降も存在し続けるリスク。仕組みではなく運用・契�
 | v1.0 | 2026-08-10 | 初版（秘書AI）。A7指摘の最終状態・残余リスク・暫定判断P-1〜P-8・Phase 1前提条件・消し込み記録表 |
 | v1.1 | 2026-08-11 | 是正パスR3（22番§1 A-15+オーナー条件(6)〔14番§8〕）。§3へP-9〜P-16（22番§23の残余リスク8件・低減策付き）を追記。P-3を消化済みへ更新（2026-08-11オーナー承認〔14番§8〕による一括事後確認）、P-6を消化済みへ更新（13番v0.5是正と同時）、両件を消し込み記録表へ記入。§3.1「Phase 0 Freeze後の運用ルール」（新アイデアはPhase 1 Backlogへ・Phase 0再拡張禁止=オーナー指定）を追記 |
 | v1.2 | 2026-08-11 | **2026-08-11オーナー承認4件（Security/UX Governance承認3件+Security Baseline承認）を消し込み記録表へ追記**: ACR-SEC-01（AI Data Scope Contract・ARCHITECTURE_LOCK）/ ACR-SEC-02（AI Output Security Gate・ARCHITECTURE_LOCK）/ QuestionClass AI_INFERABLE（条件付き）/ Security Baseline（3階層再分類条件付き。25番判定=READY_FOR_SECURE_IMPLEMENTATION）。§3.1へ第4項（Visual Effect〔Ambient Particle/WebGL/Audio等〕は将来実装時にSecurity/Performance/AccessibilityのGateを通しBusiness Logicと分離する=オーナー指定Backlogルール）を追記 |
+| v1.3 | 2026-08-11 | オーナー指示（Visual参考イメージ4点提示と同時）を§3.1へ追記: 第5項 Presentation Layer分離原則（Visual/Motion/Interaction/Sound LayerはARCHITECTURE_LOCK対象外・継続変更可・Event渡しで疎結合）、第6項 Visual実装順6段階（(2)(3)は完了、現在(4)Owner Review待ち。Vertical Sliceでは業務機能優先・Visualは並行レーン） |
