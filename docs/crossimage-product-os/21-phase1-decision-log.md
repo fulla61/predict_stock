@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | Reviewed / v1.1 / 2026-08-11 / 秘書AI |
+| Status | Reviewed / v1.2 / 2026-08-11 / 秘書AI |
 | 目的 | A7 Red Team の指摘事項・残余リスク・暫定判断を**消さずに**Phase 1へ引き継ぐ恒久記録。A7がPASS（承認）となっても本ログは削除・改変しない（追記のみ） |
 | 運用 | Phase 1開始時に本ログをBacklog（対応予定リスト）化する。消し込みはオーナーまたはMGR承認+本ログへの消し込み記録を必須とする |
 
@@ -54,6 +54,7 @@ Phase 1以降も存在し続けるリスク。仕組みではなく運用・契�
 1. **新たな改善案・追加アイデアは、重大なArchitecture欠陥でない限りPhase 1 Backlog（本ログ）へ登録する。Phase 0の再拡張は禁止**（オーナー指定。Phase 0成果物への追記は、Freeze条件の是正パスで指示された反映と重大構造矛盾の是正のみ許される）。
 2. Phase 1はVertical Slice（**Loop最低2周**のテストケースを必須に含む。22番§18）を最優先する。
 3. 判断に迷う場合（「これは重大なArchitecture欠陥か、改善アイデアか」）は、オーナー/MGRへ提示して裁定を仰ぎ、裁定結果を本ログへ追記する（勝手なPhase 0編入をしない）。
+4. **Visual Effect（Ambient Particle / WebGL / Audio等の視覚・聴覚演出）を将来実装する場合は、Security / Performance / Accessibility のGateを通す構造とし、Business Logicと分離する**（v1.2追記・オーナー指定〔2026-08-11承認の付帯〕。Backlogルールとして記録）。
 
 ## 4. Phase 1開始の前提条件（再掲）
 
@@ -67,6 +68,10 @@ Phase 1以降も存在し続けるリスク。仕組みではなく運用・契�
 |---|---|---|---|
 | 2026-08-11 | P-3 | Governance v1.1〜v3.0の秘書AI裁定は、オーナー条件付き承認（14番§8 付帯確認）で一括事後確認済み。v3.1正式化（TYPEコードLOOP/FB・PRD ID・CommercialLoop enum）も同承認に基づく | オーナー（14番§8・2026-08-11承認記録） |
 | 2026-08-11 | P-6 | 13番v0.5でヘッダ準拠欄を「05 v1.1」→「05 v3.1」へ是正（是正パスR3・22番A-12反映と同時消化） | オーナー（14番§8 Freeze条件(1)〔22番§1必要変更の実反映〕の範囲内として承認済み） |
+| 2026-08-11 | ACR-SEC-01（25番） | **承認（ARCHITECTURE_LOCK扱い）**: AI Data Scope Contract。AI/LLMの全Project・全Clientデータ包括アクセス設計を禁止し、Task/Role/Project/Data Type/Purposeの5軸Least Privilege+各AI TaskのAllowed Data/Denied Data/Allowed Tools/Allowed Output Destination明示構造を正式仕様化。反映先: 25番v1.0 §9.4・05番v3.2 §13-B | オーナー（2026-08-11） |
+| 2026-08-11 | ACR-SEC-02（25番） | **承認（ARCHITECTURE_LOCK扱い）**: AI Output Security Gate。AI生成物の外部送信・Exportは共通経路（AI Generated Content→Output Security Gate→Role/Destination Policy Check→必要に応じHuman Approval→External Send/Export）を必須通過。対象10チャネル（Email/PDF/Excel/CSV/API/Notification/WeChat/Client Portal/Factory Document/CN_OFFICE Output）、Factory/CN_OFFICE向け6項目混入禁止、allowlist方式優先。反映先: 25番v1.0 §9.7/§10・05番v3.2 §13-B | オーナー（2026-08-11） |
+| 2026-08-11 | QuestionClass AI_INFERABLE（24番§18提案①） | **条件付き承認**: QuestionClassを4分類（BLOCKER/IMPORTANT_LATER/OPTIONAL/AI_INFERABLE）へ拡張。条件: AI_INFERABLE≠CONFIRMED・AI_INFERRED等のStatus保持必須・確認/証跡なき正式条件への自動昇格禁止・重要8領域（Safety/Regulatory/Material/Critical Function/Production Reference/Price Commitment/MOQ Commitment/Legal・Compliance）はAI推定のみを最終根拠にしない。反映先: 05番v3.2 §3・24番v1.1 §7.1/§18 | オーナー（2026-08-11） |
+| 2026-08-11 | Security Baseline（25番§18.1） | **承認（3階層再分類の条件付き）**: Phase 1 Minimum Security RequirementsをSecurity Baselineとして承認。SECURITY_ARCHITECTURE_LOCK（11件）/ SECURITY_IMPLEMENTATION_REQUIREMENT（13件）/ SECURITY_CALIBRATION（6件）へ再分類し、数値・閾値のARCHITECTURE_LOCK固定を禁止。これによりACR 2件承認と合わせ25番の判定はREADY_FOR_SECURE_IMPLEMENTATIONへ更新（Business Logic本実装は未開始のまま）。反映先: 25番v1.0 §18.1/判定 | オーナー（2026-08-11） |
 
 ## Change Log
 
@@ -74,3 +79,4 @@ Phase 1以降も存在し続けるリスク。仕組みではなく運用・契�
 |---|---|---|
 | v1.0 | 2026-08-10 | 初版（秘書AI）。A7指摘の最終状態・残余リスク・暫定判断P-1〜P-8・Phase 1前提条件・消し込み記録表 |
 | v1.1 | 2026-08-11 | 是正パスR3（22番§1 A-15+オーナー条件(6)〔14番§8〕）。§3へP-9〜P-16（22番§23の残余リスク8件・低減策付き）を追記。P-3を消化済みへ更新（2026-08-11オーナー承認〔14番§8〕による一括事後確認）、P-6を消化済みへ更新（13番v0.5是正と同時）、両件を消し込み記録表へ記入。§3.1「Phase 0 Freeze後の運用ルール」（新アイデアはPhase 1 Backlogへ・Phase 0再拡張禁止=オーナー指定）を追記 |
+| v1.2 | 2026-08-11 | **2026-08-11オーナー承認4件（Security/UX Governance承認3件+Security Baseline承認）を消し込み記録表へ追記**: ACR-SEC-01（AI Data Scope Contract・ARCHITECTURE_LOCK）/ ACR-SEC-02（AI Output Security Gate・ARCHITECTURE_LOCK）/ QuestionClass AI_INFERABLE（条件付き）/ Security Baseline（3階層再分類条件付き。25番判定=READY_FOR_SECURE_IMPLEMENTATION）。§3.1へ第4項（Visual Effect〔Ambient Particle/WebGL/Audio等〕は将来実装時にSecurity/Performance/AccessibilityのGateを通しBusiness Logicと分離する=オーナー指定Backlogルール）を追記 |

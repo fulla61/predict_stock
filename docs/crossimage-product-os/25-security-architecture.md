@@ -2,13 +2,13 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **Draft** |
-| 版 | v0.1 |
+| Status | **Reviewed（2026-08-11 オーナー承認: ACR-SEC-01/02採用〔ARCHITECTURE_LOCK〕+ §18.1 Security Baseline承認〔3階層再分類条件付き〕）** |
+| 版 | v1.0 |
 | 日付 | 2026-08-11 |
 | 作成 | SEC（Security Architect） |
-| 準拠 | 05-governance-pack.md **v3.1**（§8 情報遮断〔PDF/Excel/CSV/AI出力/通知/API/WeChat適用〕・§9 Gate・§1 Role 11種）/ 15-a3-data-design.md v0.3.1（§2.12 RBAC・§6 audit_logs・§0-5 イミュータブル・§7 情報遮断3層・89表）/ 22-final-architecture-review.md §17（Phase 1 Minimum Schema）/ 12-a5-china-ops.md v0.5（Excel/WeChatハイブリッド=外部チャネル）/ 01-architecture-overview.md §1（3 Portal）/ 21-phase1-decision-log.md（残余リスク） |
+| 準拠 | 05-governance-pack.md **v3.2**（§8 情報遮断〔PDF/Excel/CSV/AI出力/通知/API/WeChat適用〕・§9 Gate・§1 Role 11種）/ 15-a3-data-design.md v0.3.1（§2.12 RBAC・§6 audit_logs・§0-5 イミュータブル・§7 情報遮断3層・89表）/ 22-final-architecture-review.md §17（Phase 1 Minimum Schema）/ 12-a5-china-ops.md v0.5（Excel/WeChatハイブリッド=外部チャネル）/ 01-architecture-overview.md §1（3 Portal）/ 21-phase1-decision-log.md（残余リスク） |
 | 位置づけ | Phase 0 Architecture（Freeze済み）に対する**実装前の独立セキュリティ工程**。本書は防御要件を設計するものであり、攻撃手法の詳細手順書ではない。実装（コード）は含まない。 |
-| 分類記法 | 各要件に `MUST_BEFORE_MVP`（MVP開始前必須）/ `MUST_BEFORE_PRODUCTION`（本番公開前必須）/ `SHOULD`（強く推奨）/ `LATER`（Phase 1後半以降）を付す。 |
+| 分類記法 | 各要件に `MUST_BEFORE_MVP`（MVP開始前必須）/ `MUST_BEFORE_PRODUCTION`（本番公開前必須）/ `SHOULD`（強く推奨）/ `LATER`（Phase 1後半以降）を付す（=**時期**の分類）。加えてv1.0より**変更可能性の3階層**（2026-08-11オーナー承認）: `SECURITY_ARCHITECTURE_LOCK`（後から変更すると重大な構造変更）/ `SECURITY_IMPLEMENTATION_REQUIREMENT`（実装必須だが方式・設定値は変更可能）/ `SECURITY_CALIBRATION`（実運用データで調整する値）を§18.1で付与する。**数値・閾値をARCHITECTURE_LOCKとして永久固定しない**（オーナー条件）。 |
 
 > 本書は自社SaaS（Software as a Service：クラウド提供型ソフトウェア）「Crossimage Product OS」の**防御設計**である。既存Phase 0設計（情報遮断・全出力チャネルへのPermission適用・Append-only Audit Log・Immutable Version）を前提としつつ、**「それだけで安全」とは判断せず、ゼロベースでレビュー**した。Phase 0 Architectureの変更を要する事項は末尾 §ARCHITECTURE_CHANGE_REQUEST に分離記載する（本書での勝手な変更はしない）。
 > 言語ルール（05 §14）準拠: 専門用語は初出時に日本語説明を付す。
@@ -270,9 +270,22 @@ Prompt Injection = 入力文中の「指示のように見える文」でAIの�
 | 9.3.2 | 出力allowlist | 工場向け出力は許可フィールドのみで構成（§10のallowlist）。禁止フィールド（顧客価格・margin・他工場）を出力スキーマに存在させない | MUST_BEFORE_MVP |
 | 9.3.3 | 出力遮断検査 | 生成後・送信前に§9.7のスキャンで機微パターン（金額×顧客文脈・他工場名・margin語）を検査 | MUST_BEFORE_MVP |
 
-### 9.4 AI Least Privilege（最小権限）— Task単位データスコープ契約
+### 9.4 AI Least Privilege（最小権限）— AI Data Scope Contract（Task単位データスコープ契約）
 
-**AIはそのTaskに必要なProjectデータだけアクセス可能**とする。各AI呼出しに「データスコープ契約」（この呼出しがアクセスしてよいProject・エンティティ種別・sensitivity上限・呼べるツール）を明示付与し、契約外アクセスを拒否・監査する。
+> **承認済み（2026-08-11 オーナー承認・ARCHITECTURE_LOCK扱い。ACR-SEC-01採用）**。以下は承認された正式仕様である。
+
+**AIはそのTaskに必要なProjectデータだけアクセス可能**とする。**AI/LLMが全Project・全Clientデータへ包括アクセスする設計を禁止**し、Least Privilegeは次の**5軸**に基づいて定義する: **Task / Role / Project / Data Type / Purpose**。
+
+各AI Taskについて、次の**4項目を明示できる構造**とする（明示なきアクセスは不可）:
+
+1. **Allowed Data**（アクセス許可データ）
+2. **Denied Data**（明示的アクセス禁止データ）
+3. **Allowed Tools**（呼出し許可ツール）
+4. **Allowed Output Destination**（出力許可先）
+
+**Taskに不要な場合はAI Contextへ入れない機密カテゴリ（オーナー指定7種）**: Client機密 / Factory機密 / Crossimage Margin / Other Factory Quote / Internal Factory Score / Internal Risk Comment / Other Client Data。
+
+各AI呼出しに「データスコープ契約」（この呼出しがアクセスしてよいProject・エンティティ種別・sensitivity上限・呼べるツール・出力許可先）を明示付与し、契約外アクセスを拒否・監査する。
 
 | # | 要件 | 分類 |
 |---|---|---|
@@ -298,18 +311,25 @@ Prompt Injection = 入力文中の「指示のように見える文」でAIの�
 | 9.6.2 | 法規（Regulatory）・関税（DutyStatus）のFINAL/NOT_APPLICABLEはREG/MGR/通関業者の人間承認必須（15 §3.13/§2.15.3）。AI単独確定をアプリ+DB両層で拒否 | MUST_BEFORE_MVP |
 | 9.6.3 | 顧客/工場向けの価格・性能・納期の約束（Claim含む、G-16）は送信前にHuman Approval。承認画面にconfidence・Status・根拠を強制表示 | MUST_BEFORE_MVP |
 
-### 9.7 AI出力の遮断検査（送信前スキャン）— アーキテクチャ定義
+### 9.7 AI Output Security Gate（AI出力の遮断検査・送信前スキャン）— アーキテクチャ定義
 
-すべてのAI生成出力（生成文書・要約・提案文・翻訳・通知）は、**宛先確定前に「出力遮断検査ゲート」を必ず通過**する。これをアーキテクチャの必須コンポーネントとして定義する。
+> **承認済み（2026-08-11 オーナー承認・ARCHITECTURE_LOCK扱い。ACR-SEC-02採用）**。以下は承認された正式仕様である。
+
+すべてのAI生成物の外部送信・Exportは、**必ず次の共通経路**を通過する（迂回経路を設けない）:
 
 ```
-AI生成 ─▶ [出力遮断検査ゲート] ─▶ (合格) ─▶ 宛先別チャネルへ
-              │                        (Client/Factory/CN/Email/WeChat/API)
-              ├ 宛先Roleのallowlist照合（§10。許可フィールド以外を含まないか）
+AI Generated Content ─▶ [Output Security Gate] ─▶ Role/Destination Policy Check
+   ─▶ (必要に応じ) Human Approval ─▶ External Send / Export
+              │
+              ├ 宛先Role/Output Typeのallowlist照合（§10。許可フィールド以外を含まないか）
               ├ 機微パターン検査（margin/cost/他工場名/他顧客ID/顧客価格×工場宛の組合せ）
               ├ sensitivityタグ検査（S4を外部宛出力に含まないか）
               └ (不合格) ─▶ 送信BLOCK + 監査記録 + 人間レビューへ回送
 ```
+
+**対象チャネル（10種・オーナー指定）**: Email / PDF / Excel / CSV / API / Notification（通知）/ WeChat / Client Portal / Factory Document / CN_OFFICE Output。
+
+**判定方式**: 可能な限りblocklist（禁止語検出）ではなく**Role/Output Typeごとのallowlist方式を優先**する（§10.2.1と同一原則）。
 
 | # | 要件 | 分類 |
 |---|---|---|
@@ -321,7 +341,9 @@ AI生成 ─▶ [出力遮断検査ゲート] ─▶ (合格) ─▶ 宛先別�
 
 ## 10. External Channel Security（外部チャネルセキュリティ）
 
-対象チャネル: Email / Excel / PDF / CSV / WeChat / 通知（メール・プッシュ・LINE）。05 §8 v3.1が全チャネルへの遮断適用を明記。**検証方法は自動テスト+出力スキーマのallowlist方式**とする。
+> **承認済み（2026-08-11 オーナー承認・ARCHITECTURE_LOCK扱い。ACR-SEC-02の適用先）**: 全外部送信・Exportは§9.7のOutput Security Gate（共通経路: AI Generated Content → Output Security Gate → Role/Destination Policy Check → 必要に応じHuman Approval → External Send/Export）を必ず通過する。
+
+対象チャネル（10種）: **Email / PDF / Excel / CSV / API / Notification（メール・プッシュ・LINE）/ WeChat / Client Portal / Factory Document / CN_OFFICE Output**。05 §8 v3.1が全チャネルへの遮断適用を明記し、05 v3.2 §13-BがGateをARCHITECTURE_LOCKコンポーネントとして正式化。**検証方法は自動テスト+出力スキーマのallowlist方式**（blocklistではなくRole/Output Typeごとのallowlist方式を優先＝オーナー承認条件）とする。**Factory / CN_OFFICE向け出力では Client Selling Price（顧客販売価格）/ Crossimage Margin / Other Factory Quote / Internal Factory Score / Internal Risk Comment / Other Client Information の混入を禁止**する（§10.1の宛先Role別統制表で構造的に保証）。
 
 ### 10.1 Role別 出力フィールド統制表
 
@@ -472,22 +494,48 @@ Phase 1で実装と並行して実施する自動テスト群。**「設計で�
 
 ## 18. Phase 1 Minimum Security Requirements + Production Release Security Gate
 
-### 18.1 Phase 1 Minimum Security Requirements（MVP開始前 必須セット）
+### 18.1 Phase 1 Minimum Security Requirements（MVP開始前 必須セット）— Security Baseline
 
-MVP実装着手前に設計・実装方針として確定・組込みが必要な最小セット（`MUST_BEFORE_MVP`集約）。
+> **承認済み（2026-08-11 オーナー承認）**: 本節をSecurity Baselineとして承認。承認条件に基づき、各要件を**変更可能性の3階層**へ再分類した。従来の`MUST_BEFORE_MVP`等の4分類は「時期」列として維持し、新3階層を「変更可能性」列として付与する。
+>
+> - `SECURITY_ARCHITECTURE_LOCK`: 後から変更すると重大な構造変更になるもの
+> - `SECURITY_IMPLEMENTATION_REQUIREMENT`: Phase 1/Productionまでに実装必須だが方式・設定値は変更可能なもの
+> - `SECURITY_CALIBRATION`: 実運用データで調整する値。**数値・閾値をARCHITECTURE_LOCKとして永久固定しない**（オーナー条件）
 
-1. 認証: パスワード方針・内部者MFA必須・Brute Force対策・Account Recovery・Session期限（§4.1/4.2/4.4/4.5/4.6/4.9）
-2. 認可3層: RBAC×Project Permission×Object/API-level・Export権限分離・Impersonation禁止/Proxy Approval（§5）
-3. テナント分離: クエリ強制フィルタ・RLS方針・外部DBロール最小化・分離テスト（§6.1/6.2/6.3/6.5/6.6）
-4. 情報遮断3層（DBビュー/アプリ/Export）とsensitivity機械判別（§2/§10）
-5. 暗号化: TLS・at-rest・ファイル・Secret分離（§7.1/7.2/7.3/7.5）
-6. ファイル: malwareスキャン・type検証・サイズ上限・マクロ除去隔離・署名付き期限URL・原本保存（§8）
-7. AIセキュリティ: Prompt Injection対策・Least Privilege（Taskスコープ契約）・工場向け出力allowlist・出力遮断検査ゲート・Hallucination制御（§9 全体）
-8. 外部チャネル: Role別allowlist・禁止フィールド非混入の自動テスト・watermark（§10）
-9. アプリ: XSS/CSRF/SQLi/IDOR/SSRF/Rate Limit/CORS-CSP・ログ機微非露出（§11）
-10. 監査: Security Event記録・append-only・ハッシュチェーン・Hard Gate二重防御・AI呼出し監査（§12.1）
-11. セキュリティテスト: 遮断・分離・認可・AI出力フィルタ・Hard Gate・監査完全性・ファイル（§16 MVP分）
-12. セキュア開発: 環境分離・本番データ開発コピー禁止・Secret管理・Branch Protection・Code Review（§15 MVP分）
+| # | 要件 | 参照 | 時期（既存分類） | 変更可能性（3階層） |
+|---|---|---|---|---|
+| 1 | テナント分離（Tenant Isolation: クエリ強制フィルタ・RLS方針・外部DBロール最小化・分離テスト） | §6 | MUST_BEFORE_MVP | SECURITY_ARCHITECTURE_LOCK |
+| 2 | 認可3層（RBAC×Project Permission×Object/API-level）＝Least Privilege構造・Impersonation禁止/Proxy Approval | §5 | MUST_BEFORE_MVP | SECURITY_ARCHITECTURE_LOCK |
+| 3 | Export権限分離（閲覧権限とExport権限の構造分離） | §5.2 | MUST_BEFORE_MVP | SECURITY_ARCHITECTURE_LOCK |
+| 4 | 情報遮断3層（DBビュー/アプリ/Export）+ sensitivity機械判別 | §2/§10 | MUST_BEFORE_MVP | SECURITY_ARCHITECTURE_LOCK |
+| 5 | AI Data Scope Contract（5軸: Task/Role/Project/Data Type/Purpose・4明示項目: Allowed Data/Denied Data/Allowed Tools/Allowed Output Destination） | §9.4 | MUST_BEFORE_MVP | SECURITY_ARCHITECTURE_LOCK |
+| 6 | AI Output Security Gate（全外部出力の共通必須経路・Role/Output Type別allowlist優先） | §9.7/§10 | MUST_BEFORE_MVP | SECURITY_ARCHITECTURE_LOCK |
+| 7 | AI推定の非自動昇格構造（Hallucination制御: 人手承認なきCONFIRMED/FINAL化経路の不存在） | §9.6 | MUST_BEFORE_MVP | SECURITY_ARCHITECTURE_LOCK |
+| 8 | Audit Architecture（append-only・ハッシュチェーン・WORMアンカー・Hard Gate二重防御・AI呼出し監査） | §12.1 | MUST_BEFORE_MVP | SECURITY_ARCHITECTURE_LOCK |
+| 9 | Encryption Architecture（TLS・at-rest・ファイル暗号化の構造） | §7.1〜7.3 | MUST_BEFORE_MVP | SECURITY_ARCHITECTURE_LOCK |
+| 10 | Secret Management Architecture（Secret Manager分離・コード/リポジトリ直書き禁止） | §7.5/§15.3 | MUST_BEFORE_MVP | SECURITY_ARCHITECTURE_LOCK |
+| 11 | Environment Separation（本番/ステージング/開発の環境分離） | §15.1 | MUST_BEFORE_MVP | SECURITY_ARCHITECTURE_LOCK |
+| 12 | パスワード方針・Account Recovery | §4.1/4.4 | MUST_BEFORE_MVP | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 13 | MFA（内部者必須・外部重要操作step-up） | §4.2 | 内部=MUST_BEFORE_MVP／外部step-up=MUST_BEFORE_PRODUCTION | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 14 | Brute Force対策・Rate Limiting（認証・Export・AI呼出し） | §4.5/§11 | MUST_BEFORE_MVP | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 15 | Session管理（期限・step-up再認証・Session Revocation〔遠隔失効〕） | §4.6/4.7 | 期限=MUST_BEFORE_MVP／遠隔失効=MUST_BEFORE_PRODUCTION | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 16 | Prompt Injection対策の実装方式（入力＝データ原則・命令中和） | §9.1 | MUST_BEFORE_MVP | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 17 | ファイルセキュリティ（Malware Scan・type検証・マクロ除去隔離・原本イミュータブル保存） | §8 | MUST_BEFORE_MVP | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 18 | Signed URL（署名付き期限URLの発行・認可連動） | §8.5/8.6 | MUST_BEFORE_MVP | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 19 | 外部チャネル検証（禁止フィールド自動テスト・watermark・Export監査） | §10.2/§16 | MUST_BEFORE_MVP | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 20 | アプリセキュリティ（XSS/CSRF/SQLi/IDOR/SSRF/CORS-CSP・ログ機微非露出） | §11 | MUST_BEFORE_MVP | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 21 | 異常検知Alerting（大量Export・権限昇格・通常外IP・Cross-tenant試行） | §12.2 | MUST_BEFORE_PRODUCTION | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 22 | Backup（暗号化・PITR・Restoreテスト）・Key Rotation | §13/§7.6 | MUST_BEFORE_PRODUCTION | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 23 | セキュア開発（Dependency Scan・SAST・CI/CDセキュリティ・Branch Protection・Code Review・本番データ開発コピー禁止） | §15 | MVP分/PRODUCTION分は§15各行 | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 24 | セキュリティテスト（遮断・分離・認可・AI出力フィルタ・Hard Gate・監査完全性・ファイル） | §16 | MUST_BEFORE_MVP | SECURITY_IMPLEMENTATION_REQUIREMENT |
+| 25 | Session Timeout値（アイドル・絶対上限） | §4.6 | 初期値はMVP時に仮設定→実運用で校正 | SECURITY_CALIBRATION |
+| 26 | Login Retry Limit（連続失敗ロック閾値・CAPTCHA発動条件） | §4.5 | 同上 | SECURITY_CALIBRATION |
+| 27 | File Size Limit（種別ごと上限・ZIP展開制限値） | §8.3 | 同上 | SECURITY_CALIBRATION |
+| 28 | Rate Limit具体値（認証・Export・AI呼出し各閾値） | §11 | 同上 | SECURITY_CALIBRATION |
+| 29 | RPO / RTO / Backup Retention（保持期間） | §13 | 事業影響分析後に設定・校正 | SECURITY_CALIBRATION |
+| 30 | Alert Threshold（大量Export閾値・異常検知の各閾値） | §12.2 | 初期値はPRODUCTION Gate時に仮設定→実運用で校正 | SECURITY_CALIBRATION |
+
+> 内訳: SECURITY_ARCHITECTURE_LOCK **11件** / SECURITY_IMPLEMENTATION_REQUIREMENT **13件** / SECURITY_CALIBRATION **6件**（計30件）。CALIBRATION行は「値」であり、対応する仕組み自体（Session管理・Rate Limiting・Backup・Alerting等）はIMPLEMENTATION_REQUIREMENT行に含まれる。
 
 ### 18.2 Production Release Security Gate（本番公開前 Gateチェックリスト）
 
@@ -507,11 +555,11 @@ MVP実装着手前に設計・実装方針として確定・組込みが必要�
 
 ---
 
-## ARCHITECTURE_CHANGE_REQUEST
+## ARCHITECTURE_CHANGE_REQUEST — **2件とも承認済み（2026-08-11 オーナー承認・ARCHITECTURE_LOCK扱い）**
 
-Phase 0 Architecture（Freeze済み）の変更を要する事項。**本書では変更せず**、以下に分離記載する（05 §0-8・21 §3.1「Phase 0再拡張禁止」に従い、採否はオーナー/MGR裁定）。各件 Problem / Impact / Why UX・運用で解決不可 / Required Change / Alternative。
+Phase 0 Architecture（Freeze済み）の変更を要する事項として起案し、**2026-08-11にオーナーが2件とも採用を承認**した（承認内容の正式仕様は§9.4/§9.7/§10へ反映済み。Governance側の正式化は05 v3.2 §13-B）。以下は起案時の記録（Problem / Impact / Why UX・運用で解決不可 / Required Change / Alternative）として保存する。
 
-### ACR-SEC-01: AI「データスコープ契約」を第一級コンポーネントとして明記
+### ACR-SEC-01: AI「データスコープ契約」を第一級コンポーネントとして明記 — **承認済み（2026-08-11 オーナー承認・ARCHITECTURE_LOCK扱い）→ §9.4 AI Data Scope Contract として正式化**
 
 - **Problem**: 05 §8はAI出力への遮断適用を定めるが、AIが入力段階でどのProjectデータにアクセスできるかの**Least Privilege境界**（Task単位データスコープ契約、§9.4）がArchitecture上の第一級要素として明記されていない。出力側検査のみでは、Injection成功時のCross-project参照（T-04）を根絶できない。
 - **Impact**: AI Engine群のデータ取得層の設計・15番のAIアクセス経路。実装前に境界を固定しないと後付けが大改修になる（ARCHITECTURE_LOCK相当）。
@@ -519,7 +567,7 @@ Phase 0 Architecture（Freeze済み）の変更を要する事項。**本書で�
 - **Required Change**: 01 §1 AI Enginesまたは15番に「AIデータスコープ契約（対象Project・許可エンティティ・sensitivity上限・許可ツール）を全AI呼出しに必須付与し、契約は取得層で強制」をARCHITECTURE_LOCKとして追記。
 - **Alternative**: 明記せずとも§9.4を実装ガイドラインとして運用可能だが、LOCK化しない場合Engineごとに実装が分岐し遮断強度が不均一になるリスクを受容することになる。
 
-### ACR-SEC-02: 「AI出力遮断検査ゲート」を全出力チャネルの共通必須経路として位置づけ
+### ACR-SEC-02: 「AI出力遮断検査ゲート」を全出力チャネルの共通必須経路として位置づけ — **承認済み（2026-08-11 オーナー承認・ARCHITECTURE_LOCK扱い）→ §9.7 AI Output Security Gate として正式化**
 
 - **Problem**: 05 §8 v3.1は遮断の適用範囲（PDF/Excel/CSV/AI出力/通知/API/WeChat）を列挙するが、AI/非AI出力が送信前に必ず通る**単一の遮断検査ゲート**（§9.7）というアーキテクチャ上の共通経路が定義されていない。チャネルごとに個別実装すると迂回経路・実装漏れが生じうる。
 - **Impact**: Export層・通知層・API応答層・WeChatDigest生成の共通化。01 §1のExport/Notification部品配置。
@@ -527,15 +575,17 @@ Phase 0 Architecture（Freeze済み）の変更を要する事項。**本書で�
 - **Required Change**: 01 §1のCore部品図に「出力遮断検査ゲート（全外部出力の共通必須経路）」を追加し、迂回不可をLOCK化。
 - **Alternative**: 15 §2.12-3/§7の「テンプレートは遮断済みビューのみ参照」を全チャネルに拡張適用する運用で近似可能。ただし動的AI生成文（自由文中への機微混入）はビュー参照制約だけでは防ぎきれず、パターン検査ゲートの明示が望ましい。
 
-> いずれも**新規コンポーネントの追加でなく既存原則（遮断・AI出力適用）の構造的明確化**であり、テーブル追加・破壊的変更を伴わない。Phase 0再拡張ではなく「Freeze条件の明確化」の範囲としてオーナー裁定を仰ぐ。
+> いずれも**新規コンポーネントの追加でなく既存原則（遮断・AI出力適用）の構造的明確化**であり、テーブル追加・破壊的変更を伴わない。Phase 0再拡張ではなく「Freeze条件の明確化」の範囲としてオーナー裁定を仰いだ結果、**2026-08-11に2件ともARCHITECTURE_LOCK扱いで承認**された。
 
 ---
 
-## 判定案
+## 判定
 
-### NOT_READY_FOR_SECURE_IMPLEMENTATION（条件付き。下記MVP必須セット確定で READY へ転じる）
+### **READY_FOR_SECURE_IMPLEMENTATION**（2026-08-11 判定更新）
 
-**根拠**:
+**判定更新の根拠（v1.0）**: v0.1判定案 NOT_READY（条件付き）の転換条件は、①ACR-SEC-01/02のオーナー裁定、②§18.1 MVP必須セットの承認・設計反映、の2点であった。2026-08-11のオーナー承認により、**ACR-SEC-01（AI Data Scope Contract）・ACR-SEC-02（AI Output Security Gate）が2件ともARCHITECTURE_LOCK扱いで承認**され、**§18.1がSecurity Baselineとして承認（3階層再分類の条件付き。本書v1.0で反映済み）**されたため、条件は全消化された。よって READY_FOR_SECURE_IMPLEMENTATION へ転じる。**ただしBusiness Logic本実装は未開始のまま**であり、本判定は「セキュア実装に着手してよい」ことを示すものであって実装の完了・本番公開可否を示すものではない（本番公開可否は§18.2 Production Release Security Gateで別途判定）。
+
+**v0.1判定案時の根拠（記録として保存）**:
 
 1. **既存Phase 0設計はセキュリティ基盤として強固**: 情報遮断3層（DBビュー/アプリ/Export）・append-only監査（ハッシュチェーン+WORM）・イミュータブル版・Hard Gate二重防御・RBAC+Project Based Permission・sensitivity機械判別は、本レビューの主要脅威（T-01/T-06/T-07）に対する土台が既に設計されている。この点は高く評価できる。
 
@@ -547,7 +597,7 @@ Phase 0 Architecture（Freeze済み）の変更を要する事項。**本書で�
 
 5. 本番公開の可否は別途 §18.2 Production Release Security Gate（第三者ペネトレーションテスト・個人情報保護法の専門家確認を含む）で判定する。
 
-> 最終判定は秘書AIがオーナーへ報告する。本書は判定「案」である。
+> v0.1時点では判定「案」であったが、2026-08-11のオーナー承認（ACR 2件+Security Baseline）により上記のとおり **READY_FOR_SECURE_IMPLEMENTATION** が正式判定となった。
 
 ---
 
@@ -555,4 +605,5 @@ Phase 0 Architecture（Freeze済み）の変更を要する事項。**本書で�
 
 | 版 | 日付 | 変更 |
 |---|---|---|
+| v1.0 | 2026-08-11 | **オーナー承認反映（Reviewed昇格）**。①ACR-SEC-01承認反映: §9.4を「AI Data Scope Contract」正式仕様へ更新（ARCHITECTURE_LOCK扱い。5軸=Task/Role/Project/Data Type/Purpose、4明示項目=Allowed Data/Denied Data/Allowed Tools/Allowed Output Destination、Taskに不要な機密7種のAI Context投入禁止、包括アクセス設計の禁止）。②ACR-SEC-02承認反映: §9.7を「AI Output Security Gate」正式仕様へ更新（共通経路=AI Generated Content→Output Security Gate→Role/Destination Policy Check→必要に応じHuman Approval→External Send/Export、対象10チャネル=Email/PDF/Excel/CSV/API/Notification/WeChat/Client Portal/Factory Document/CN_OFFICE Output、allowlist方式優先）。§10へ同内容とFactory/CN_OFFICE向け6項目混入禁止を明記。③Security Baseline承認反映: §18.1を3階層（SECURITY_ARCHITECTURE_LOCK 11件 / SECURITY_IMPLEMENTATION_REQUIREMENT 13件 / SECURITY_CALIBRATION 6件）の表へ改訂（既存の時期4分類は「時期」列として維持）。数値・閾値の永久固定禁止を明記。④判定を NOT_READY（条件付き）→ **READY_FOR_SECURE_IMPLEMENTATION** へ更新（ACR 2件承認+Baseline承認で条件全消化。Business Logic本実装は未開始のまま）。⑤準拠を05 v3.2へ更新、ARCHITECTURE_CHANGE_REQUEST 2件を承認済みへ更新 |
 | v0.1 | 2026-08-11 | 初版（SEC）。Threat Model（STRIDE・脅威20件）/ Asset Classification（機密度4段階）/ Trust Boundary（3 Portal・AI処理境界・中国側NW）/ Authentication / Authorization（3層・Export分離・Proxy Approval）/ Tenant Isolation（RLS）/ Encryption・Secret / File Security（マクロ除去）/ AI Security（Prompt Injection・Least Privilege・出力遮断検査ゲート・Hallucination制御）/ External Channel（Role別allowlist・自動テスト検証）/ Application Security / Audit・Monitoring / Backup・DR / Privacy・Retention / Secure Development / Security Test Plan / Penetration Test Plan / Phase 1 Minimum + Production Gate。ARCHITECTURE_CHANGE_REQUEST 2件。判定案=NOT_READY（条件付き） |

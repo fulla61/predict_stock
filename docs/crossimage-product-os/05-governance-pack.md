@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 |---|---|
-| Status | **v3.1 APPROVED（2026-08-11 オーナー条件付き承認〔14番§8〕に伴う正式化。v1.1〜v3.0の秘書AI裁定は同承認で事後確認済み）** |
+| Status | **v3.2 APPROVED（2026-08-11 オーナーSecurity/UX Governance承認3件〔ACR-SEC-01 AI Data Scope Contract・ACR-SEC-02 AI Output Security Gate・QuestionClass AI_INFERABLE条件付き承認〕の正式化。v3.1=2026-08-11 オーナー条件付き承認〔14番§8〕に伴う正式化、v1.1〜v3.0の秘書AI裁定は同承認で事後確認済み）** |
 | 適用範囲 | Crossimage Product OS に関わる全エージェント（A1〜A7, B1〜B6, C1〜C4, 運用AI Engine）および全設計・実装成果物 |
 | 変更手続 | 本書の変更は秘書AIがChange Logに追記し、オーナー承認後に発効。**各エージェントによる勝手な用語・Status・ID の新設は禁止**（必要時は「Governance変更提案」として成果物末尾に記載し、統合レビューで採否判定） |
 
@@ -112,7 +112,7 @@
 | Complaint根本原因 | `FACTORY / TRADING_COMPANY / CLIENT / LOGISTICS / END_USER / UNKNOWN`（UNKNOWN≠商社責任） |
 | 顧客心理(内部) | `IDEA / EXCITED / CONVINCED / COMMITTED / ORDERED` |
 | Automation分類 | `A_FULL_AUTO / B_AI_DRAFT / C_HUMAN_DECISION / D_MANUAL_EXCEPTION` |
-| QuestionClass（顧客質問分類） | `BLOCKER / IMPORTANT_LATER / OPTIONAL`（v1.1追加、A2提案） |
+| QuestionClass（顧客質問分類） | `BLOCKER / IMPORTANT_LATER / OPTIONAL / AI_INFERABLE`（v1.1追加、A2提案。**v3.2: AI_INFERABLE追加**〔24番§18提案①・2026-08-11オーナー条件付き承認〕。AI_INFERABLE=AIが既存情報から推測可能なため質問自体を出さない項目。**承認条件**: ①AI_INFERABLE ≠ CONFIRMED — AI推定情報には必ず `AI_INFERRED` 等のData Confidence/Source Statusを保持する ②AI推定を顧客確認・工場確認・Crossimage確認・外部証跡なしに正式条件へ自動昇格させない ③特に Safety / Regulatory / Material / Critical Function / Production Reference / Price Commitment / MOQ Commitment / Legal・Compliance の8領域ではAI推定だけを最終根拠にしない） |
 | RulePack | `DRAFT / REVIEW_REQUIRED / APPROVED / SUPERSEDED`（v2.1追加、A8提案） |
 | SpecVersion（仕様書版） | `DRAFT / APPROVED / SUPERSEDED`（v2.2追加、A3提案。quality_standards版にも流用。RFQ添付はDRAFT可、量産はAPPROVED必須） |
 | PO | `DRAFT / APPROVED / ISSUED / FACTORY_CONFIRMED / COMPLETED / CANCELLED`（v2.2追加、A3提案。G-01判定の参照先） |
@@ -281,6 +281,13 @@ Project / Requirement / Specification / RFQ / Quote / Sample / Approval / Qualit
 ### 未知カテゴリー対応
 Category Rule Pack が存在しない商品が入力された場合: AIが属性タグを推定 → 属性ベースでルールを組み立て → `REVIEW_REQUIRED` として人間（PM/QA/REG）が確認・補正 → 実績が貯まったら新Rule Packとして正式登録する。**「未対応カテゴリーのため受付不可」という挙動は禁止**。
 
+## 13-B. AIセキュリティのARCHITECTURE_LOCKコンポーネント（v3.2・2026-08-11オーナー承認）
+
+以下2件を `ARCHITECTURE_LOCK`（§0-8）のコンポーネントとして正式化する。詳細仕様は 25-security-architecture.md（§9.4 / §9.7 / §10）を正とし、本節は位置づけのみを規定する。
+
+1. **AI Data Scope Contract（AIデータスコープ契約：AIのアクセス範囲を契約として明示する仕組み）** — AI/LLMが全Project・全Clientデータへ包括アクセスする設計を禁止し、Task / Role / Project / Data Type / Purpose の5軸に基づくLeast Privilege（最小権限：必要最小限のみ許可する原則）とする。各AI Taskに Allowed Data / Denied Data / Allowed Tools / Allowed Output Destination を明示できる構造を必須とし、Taskに不要な機密（Client機密・Factory機密・Crossimage Margin・他工場Quote・内部Factory Score・内部リスクコメント・他Clientデータ）はAI Context（AIへの入力文脈）に入れない。
+2. **AI Output Security Gate（AI出力セキュリティゲート：AI生成物の送信前検査の共通経路）** — AI生成物の外部送信・Exportは必ず共通経路 `AI Generated Content → Output Security Gate → Role/Destination Policy Check → 必要に応じHuman Approval → External Send/Export` を通過する。対象は Email / PDF / Excel / CSV / API / 通知 / WeChat / Client Portal / Factory Document / CN_OFFICE Output の全10チャネル。工場・CN_OFFICE向け出力での顧客販売価格・Margin・他工場Quote・内部Factory Score・内部リスクコメント・他顧客情報の混入を禁止し、可能な限りblocklist（禁止語検出）ではなくRole/Output Typeごとの**allowlist方式（許可項目列挙方式）を優先**する（§8遮断の構造的実現手段）。
+
 ## 14. 言語設計ルール（v2.0・最上位制約）
 
 本システムは日本語ユーザー中心・初心者利用前提の「知らない人でも使える専門システム」である。**理解を内蔵したプロダクトOS**として以下を全成果物・全UI・全文書に適用する。
@@ -384,3 +391,4 @@ Project DNAへ全情報を詰め込まない。以下を分離し相互参照す
 | v2.3 | 2026-08-10 | A7条件C-05の起案によるDoD-1範囲改訂: §15-1の対象を`10〜17`から`10〜19`へ拡大（v2.0で18・19を追加した際にDoD範囲が未更新だった欠陥の是正=RT-04）。他の変更なし。19番辞書へのClaim/DUPRO追補（v2.2予告分）は19番v0.2で実施済み |
 | v3.0 | 2026-08-10 | オーナー指示「実商流の統合」: §0-6〜10（実商流原則・Scope境界・確定分類・仮定禁止・納品後継続）、§3に9 enum追加（BudgetStatus/QuantityStatus/CustomerDecision/CostStatus/CostResponsibility/CostClass/DutyStatus/FeedbackType/FeedbackCause）+設計要素分類、G-02をApproved Production Reference Setへ改訂、§16 Commercial Feasibility Loop、§17 Cost Architecture、§18 Profile分離、§19 Feedback・Evolution・Knowledge資産化、DoDに10〜12項追加、22番・23番を割当。旧§15 DoDは§20へ改番 |
 | v3.1 | 2026-08-11 | オーナー条件付き承認（14番§8）に伴う正式化: TYPEコードにLOOP/FB追加、Product ID `PRD-{NNNN}` 追加、CommercialLoop Status enum追加（22番のGovernance変更提案①②③の採用）。情報遮断の適用範囲をUI/Excel/WeChatに加えPDF/CSV/AI出力/通知/APIまで含むことを§8注記として明確化（オーナー承認⑫） |
+| v3.2 | 2026-08-11 | オーナーSecurity/UX Governance承認3件（2026-08-11）の正式化: ①§3 QuestionClassへ `AI_INFERABLE` 追加（24番§18提案①の条件付き承認。AI_INFERABLE≠CONFIRMED・AI_INFERRED等のStatus保持必須・確認/証跡なき正式条件への自動昇格禁止・重要8領域〔Safety/Regulatory/Material/Critical Function/Production Reference/Price Commitment/MOQ Commitment/Legal・Compliance〕はAI推定のみを最終根拠にしない、を条件として明記）②§13-B新設: AI Data Scope Contract・AI Output Security Gate をARCHITECTURE_LOCKコンポーネントとして追記（25番ACR-SEC-01/02の承認。詳細は25番§9.4/§9.7/§10参照） |

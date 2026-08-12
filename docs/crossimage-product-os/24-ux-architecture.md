@@ -3,10 +3,10 @@
 | 項目 | 値 |
 |---|---|
 | Status | **Reviewed** |
-| Version | v1.0 |
+| Version | v1.1 |
 | 日付 | 2026-08-11 |
 | 作成 | UX-A（UX Architect）+ UX-RT（UX Red Team） |
-| 準拠 | 05-governance-pack.md **v3.1**（§8 Role/遮断・§14 言語ルール・§16 Loop・§17 Cost・§18 Profile分離・§3 enum群）/ 11-a2 v0.5 / 22-final-architecture-review.md（§6 Loop・§10 Human Decision・§18 Vertical Slice）/ 19-language-ux.md v0.3 / 10-a1 / 12-a5 / 16-a4 / 01 |
+| 準拠 | 05-governance-pack.md **v3.2**（§8 Role/遮断・§14 言語ルール・§16 Loop・§17 Cost・§18 Profile分離・§3 enum群）/ 11-a2 v0.5 / 22-final-architecture-review.md（§6 Loop・§10 Human Decision・§18 Vertical Slice）/ 19-language-ux.md v0.3 / 10-a1 / 12-a5 / 16-a4 / 01 |
 | 本書の範囲 | UX原則・Information Architecture・Navigation・Screen Architecture・Flow・State設計・UX Metrics。**UIビジュアルデザイン・色・フォント・Design System・詳細モック・実装・コンポーネントライブラリ選定は範囲外**（構造設計のみ） |
 | 後続 | ペルソナ検証（11ペルソナ）・画面削減Red Teamは **UX-RT実施済み（§19）**。FINAL Screen Inventory=§19.3 / 判定=§21（READY_FOR_UI_DESIGN） |
 
@@ -280,9 +280,10 @@ SC-C1 相談キャンバス
 | BLOCKER | 即時・Inline質問カード（最大3問/画面）。「あとで答える」を常設（G-10はSoft） |
 | IMPORTANT_LATER | その情報が必要になる工程の直前にJust-in-Time表示（11番§3.3） |
 | OPTIONAL | 質問せず既定値（AI_SUGGESTED）で進行。設定は「あなたの商品」内で任意変更可 |
-| **AI_INFERABLE（新設提案）** | **質問自体を出さない**。AIが推測可能な項目は推測して進み、推測値は「当社の想定（変更できます）」として可視化のみ行う。→ §18 Governance変更提案① |
+| **AI_INFERABLE（承認済み・05 v3.2正式分類）** | **質問自体を出さない**。AIが推測可能な項目は推測して進み、推測値は「当社の想定（変更できます）」として可視化のみ行う（§18 Governance変更提案①→2026-08-11オーナー条件付き承認・05 v3.2 §3へ正式反映） |
 
-- AI_INFERABLE新設の趣旨: 現行3分類では「Assumptionの確認」をOPTIONALとして質問リストに残す構造だが、質問ゼロ化のためには「**そもそも質問候補にしない**」クラスが必要。QuestionClass enumの拡張はGovernance §3の変更手続対象のため、本書は勝手に使用せず§18で起案する（採用までは OPTIONAL + 非表示運用で同等効果を出す）。
+- AI_INFERABLE新設の趣旨: 現行3分類では「Assumptionの確認」をOPTIONALとして質問リストに残す構造だが、質問ゼロ化のためには「**そもそも質問候補にしない**」クラスが必要。§18で起案し、**2026-08-11にオーナーが条件付き承認、05 v3.2 §3の正式enumとなった**（v1.0までの暫定運用〔OPTIONAL+非表示〕は正式分類へ差替え済み。画面構造への影響なし）。
+- **承認条件（05 v3.2 §3に準拠。UXでも遵守必須）**: ①AI_INFERABLE ≠ CONFIRMED — AI推定値には必ず `AI_INFERRED` 等のData Confidence/Source Statusを保持する ②顧客確認・工場確認・Crossimage確認・外部証跡なしに正式条件へ自動昇格させない（§7.2の非昇格原則と同一）③Safety / Regulatory / Material / Critical Function / Production Reference / Price Commitment / MOQ Commitment / Legal・Compliance の8領域ではAI推定だけを最終根拠にしない。
 
 ### 7.2 再質問禁止と推測値の非昇格（UI表現）
 
@@ -706,11 +707,11 @@ SC-C3 商品カード「同じものをもう一度」タップ
 
 ---
 
-## 18. Governance変更提案（1件）
+## 18. Governance変更提案（1件）— **承認済み（条件付き・05 v3.2正式化）**
 
-> Governance Pack冒頭表の変更手続に従い起案する。**採否確定まで本書は現行3分類の枠内で運用可能な設計とした**（§7.1のとおりOPTIONAL+非表示運用で暫定代替可）。
+> Governance Pack冒頭表の変更手続に従い起案し、**2026-08-11にオーナーが条件付きで承認、05 v3.2 §3へ正式反映された**。承認条件（AI_INFERABLE≠CONFIRMED・AI_INFERRED Status保持必須・確認/証跡なき自動昇格禁止・重要8領域はAI推定のみを最終根拠にしない）は§7.1に記載のとおり。v1.0まで定義していた暫定代替（OPTIONAL+非表示運用）は役目を終え、**正式分類 `AI_INFERABLE` を採用済み**（画面構造への影響なし）。以下は起案時の記録として保存する。
 
-### 提案①: QuestionClass enumへの `AI_INFERABLE` 追加
+### 提案①: QuestionClass enumへの `AI_INFERABLE` 追加 — **承認済み（2026-08-11 オーナー条件付き承認）**
 
 - **内容**: Governance §3 QuestionClass を `BLOCKER / IMPORTANT_LATER / OPTIONAL / AI_INFERABLE` の4値へ拡張する。
 - **定義**: AIが既存情報（入力・添付・Client Knowledge・Rule Pack既定）から十分な確度で推測可能な項目。**質問として顧客に提示しない**。推測値はSpecField `AI_SUGGESTED` として保持し、顧客画面では「当社の想定（変更できます）」として可視化のみ行う（§7.2の非昇格原則に従う）。
@@ -837,7 +838,7 @@ Click数の主な根拠（概算の内訳）:
 UI Design Phaseへの申し送り（判定の条件ではない）:
 - §17 spec（FINAL版）の8項目の範囲でビジュアル設計を行うこと。要素の追加・削除はUX-Aへ差戻し。
 - CALIBRATION_VALUE（SC-N1軽微差分昇格の閾値・通知日次上限・Option提示数・Loop周回閾値等）は数値を仮置きせずCONFIGとして実装すること。
-- §18提案①（AI_INFERABLE）の裁定結果が出たら、§7.1の暫定運用（OPTIONAL+非表示）を正式分類へ差し替えること（画面構造への影響なし）。
+- §18提案①（AI_INFERABLE）は2026-08-11に条件付き承認済み（05 v3.2）。§7.1の暫定運用（OPTIONAL+非表示）は正式分類 `AI_INFERABLE` へ差替え済み（画面構造への影響なし）。実装時は承認条件（AI_INFERRED Status保持・自動昇格禁止・重要8領域はAI推定のみを最終根拠にしない）を遵守すること。
 - スマホ完結保証対象（§8.8）の画面はDesktop縮小表示の禁止（構造規定）を受入基準に含めること。
 
 ---
@@ -846,5 +847,6 @@ UI Design Phaseへの申し送り（判定の条件ではない）:
 
 | 版 | 日付 | 変更 |
 |---|---|---|
+| v1.1 | 2026-08-11 | **§18 Governance変更提案①（AI_INFERABLE）のオーナー条件付き承認（2026-08-11・05 v3.2正式化）を反映**。§7.1の分類表・注記を「承認済み・正式分類」へ更新し、暫定代替（OPTIONAL+非表示運用）の記述を「正式採用済み」へ差替え。承認条件（AI_INFERABLE≠CONFIRMED・AI_INFERRED等のData Confidence/Source Status保持必須・顧客確認/工場確認/Crossimage確認/外部証跡なしの正式条件への自動昇格禁止・重要8領域〔Safety/Regulatory/Material/Critical Function/Production Reference/Price Commitment/MOQ Commitment/Legal・Compliance〕はAI推定のみを最終根拠にしない）を§7.1/§18/§21申し送りへ注記。準拠を05 v3.2へ更新。画面構造・Screen Inventory・判定（READY_FOR_UI_DESIGN）に変更なし |
 | v1.0 | 2026-08-11 | **UX-RT実施・FINAL確定（Reviewed昇格）**。§19記入: 11ペルソナUX Stress Test（A初心者通しLoop2周/Bイメージのみ/C仕様書保有FAST TRACK/D価格最優先/E高品質ブランド/Fリピート/Gスマホ完結/H SALES/I PM/J MGR/K CN_OFFICE。全PASS・計数表+Click根拠付き）・発見問題14件と是正（全件反映: #1 NEXT DECISIONカードのインライン入力/#2 見積確認・サンプル確認StateのSC-C3追加/#3 変更相談導線/#4 成立周回のSC-C4廃止=SC-C3内1画面完結/#5 SC-C1連続遷移+「他の案も見たい」/#6 SALES理由プリフィル/#7 Repeat時期プリセット/#8 納期質問プリセット/#9 軽微差分のSC-N1ワンタップ昇格/#10 受領登録自動化/#11 金額と確度バッジ同一カード/#12 MOQ→最小数量主表記/#13 MODIFY変更条件ミニフォーム/#14 工場選定MODIFY=再探索Task）・Screen Reduction Red Team（5 Critical Flow×3問=15仮説: 採用6/不採用9・理由付き）。§19.3 **Screen Inventory AFTER（FINAL）=9画面確定**（顧客4/社内3/中国2/FACTORY 0。BEFORE 17→9の削除・統合理由表）。§17 Screen SpecificationをFINAL版へ更新。§20 ARCHITECTURE_CHANGE_REQUEST=0件維持。§21新設: 判定案 **READY_FOR_UI_DESIGN**+根拠+UI Design Phase申し送り。Statusヘッダ Reviewed / v1.0 / UX-A+UX-RT |
 | v0.1 | 2026-08-11 | 初版Draft（UX-A）。UX Principles（3者の見え方・Action正準セット・心理順序DESIRE→DECISION）/ Role Model 10種 / IA（3空間・隠蔽マッピング）/ Navigation（NEXT DECISION・Decision Queue・今日任务）/ Screen Inventory BEFORE 17画面×10検証質問→AFTER仮説9画面 / Adaptive Customer Entry（6入口吸収・Conversation First+Dynamic Form Hybrid）/ Minimum Question Engine UX（AI_INFERABLE起案・AI推測非昇格）/ 主要8 Flow（Loop顧客体験の自然化・Option可変数・Repeat差分起点・Feedback非クレーム化・Evolution・Mobile）/ One Decision Screen+例外11類型 / Cost・Quality・Risk UX / Notification 3優先度 / Progressive Disclosure / State Design 12状況 / Permission表示規則 / UX Metrics 12指標 / Phase 1最小画面セット9 / Screen Spec 9画面 / UX-RT実施欄（空欄構造）/ ARCHITECTURE_CHANGE_REQUEST欄（該当なし0件） |
