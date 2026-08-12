@@ -313,6 +313,7 @@ footer.site{
     <div>
       <h1>Crossimage Visual PoC</h1>
       <p class="tagline">Ambient Interactive Interface — 水と空気のように静かな、清潔で精密な画面の技術検証</p>
+      <p class="tagline">雰囲気強度（subtle / standard / rich）はOwner Reviewで「控えめ⇔豊か」を比較するための機能です。</p>
       <span id="notice-reduced" class="notice">Reduced Motionモード適用中（粒子1/4・Cursor/Morph停止・Ripple最小化）</span>
       <span id="notice-nowebgl" class="notice warn">WebGLを利用できないため、静的な背景にフォールバックしています</span>
     </div>
@@ -352,6 +353,14 @@ footer.site{
       <button data-quality="high" aria-pressed="false">high</button>
       <button data-quality="med" aria-pressed="false">med</button>
       <button data-quality="low" aria-pressed="false">low</button>
+    </div>
+
+    <h3>雰囲気強度（<span id="preset-current">standard</span>）</h3>
+    <p class="drawer-sub" style="margin-bottom:6px">Owner Review用の比較機能。subtle=現行値 / standard=既定（粒子+30%・弱いウォッシュ） / rich=水面ウォッシュ+Soft Bokeh</p>
+    <div class="quality-group" role="group" aria-label="雰囲気強度選択">
+      <button data-preset="subtle" aria-pressed="false">subtle</button>
+      <button data-preset="standard" aria-pressed="true">standard</button>
+      <button data-preset="rich" aria-pressed="false">rich</button>
     </div>
   </aside>
 
@@ -547,7 +556,19 @@ const FLAG_DEFAULTS = {
   sound: false,
   masterOff: false,
   showDebug: true,
-  quality: 'auto'
+  quality: 'auto',
+  ambientPreset: 'standard'   // 雰囲気強度（Owner Review比較用）: subtle | standard | rich
+};
+
+/* 雰囲気強度プリセット（Owner Review比較用）
+ *  subtle   = 現行値そのまま（v1検証済み挙動と同一）
+ *  standard = 粒子opacity上限+30% / サイズ僅かに拡大 / 水面ウォッシュを弱く有効化
+ *  rich     = 参考イメージ方向: ウォッシュ全開 + Soft Bokeh Orbs + 粒子1.3倍の存在感
+ *  ※ コンテンツ矩形背後の自動減光は全プリセットで維持（ウォッシュ/Bokehにも適用） */
+const AMBIENT_PRESETS = {
+  subtle:   { alpha: 1.0, size: 1.0,  wash: 0.0, bokehCount: 0, bokehAlpha: 0.0 },
+  standard: { alpha: 1.3, size: 1.06, wash: 0.4, bokehCount: 0, bokehAlpha: 0.0 },
+  rich:     { alpha: 1.3, size: 1.12, wash: 1.0, bokehCount: 7, bokehAlpha: 1.0 }
 };
 const Flags = (() => {
   let state = Object.assign({}, FLAG_DEFAULTS);
@@ -555,6 +576,7 @@ const Flags = (() => {
     const saved = JSON.parse(localStorage.getItem(FLAG_KEY) || '{}');
     for (const k in FLAG_DEFAULTS) if (k in saved) state[k] = saved[k];
   } catch (e) { /* localStorage不可でも動作継続 */ }
+  if (!AMBIENT_PRESETS[state.ambientPreset]) state.ambientPreset = 'standard'; // 不正値ガード
   const listeners = [];
   function save() { try { localStorage.setItem(FLAG_KEY, JSON.stringify(state)); } catch (e) {} }
   return {
@@ -642,6 +664,8 @@ const AMBIENT_VS = [
 'uniform float u_mouseStrength;',
 'uniform vec4  u_contentRect;',  // x,y,w,h (CSS px) — UI背後の減光領域
 'uniform float u_detail;',       // shader複雑度 (Quality)
+'uniform float u_presetAlpha;',  // 雰囲気強度: opacity倍率 (subtle=1.0 / standard・rich=1.3)
+'uniform float u_presetSize;',   // 雰囲気強度: 粒子サイズ倍率
 // Meaningful Motion（抽象Stateのみ）: 0=idle 1=factory 2=decision 3=approved 4=completed 5=loop
 'uniform float u_motionMode;',
 'uniform float u_motionStrength;',
@@ -790,7 +814,7 @@ const AMBIENT_VS = [
 '',
 // ---- color / alpha（白 / Ice Blue / Pale Cyan, opacity 0.15〜0.35） ----
 '  float baseA = 0.15 + 0.20 * hash21(a_seed + 2.2);',
-'  v_alpha = clamp((baseA + extraGlow * 0.30) * dim * alphaMul, 0.0, 0.75);',
+'  v_alpha = clamp((baseA * u_presetAlpha + extraGlow * 0.30) * dim * alphaMul, 0.0, 0.75);',
 '  float ch = hash21(a_seed + 9.1);',
 '  vec3 cWhite = vec3(0.86, 0.91, 0.94);',   // 白（地色よりごく僅かに沈む白）
 '  vec3 cIce   = vec3(0.749, 0.878, 0.933);',// Ice Blue #BFE0EE
@@ -800,7 +824,7 @@ const AMBIENT_VS = [
 '  vec2 clip = (px / u_resolution) * 2.0 - 1.0;',
 '  clip.y = -clip.y;',
 '  gl_Position = vec4(clip, 0.0, 1.0);',
-'  gl_PointSize = (1.3 + 1.5 * hash21(a_seed + 4.4) + extraGlow * 1.6) * u_dpr;',
+'  gl_PointSize = (1.3 + 1.5 * hash21(a_seed + 4.4) + extraGlow * 1.6) * u_presetSize * u_dpr;',
 '}'
 ].join('\n');
 
@@ -813,6 +837,88 @@ const AMBIENT_FS = [
 '  float m = 1.0 - smoothstep(0.12, 0.5, length(d));',
 '  if (m < 0.01) discard;',
 '  gl_FragColor = vec4(v_color, v_alpha * m);',
+'}'
+].join('\n');
+
+/* ---- 雰囲気強度: 水面ウォッシュ + Soft Bokeh Orbs（背景canvasの追加フルスクリーンパス）
+ *  粒子より先に描画。淡いIce Blue〜白のみ（黒・濃色は禁止）、総alphaは0.35で上限クリップ。
+ *  コンテンツ矩形背後は粒子と同じ式で減光し、本文コントラストを維持する。 ---- */
+const WASH_VS = [
+'attribute vec2 a_pos;',
+'void main(){ gl_Position = vec4(a_pos, 0.0, 1.0); }'
+].join('\n');
+
+const WASH_FS = [
+'precision mediump float;',
+'uniform vec2  u_res;',          // CSS px
+'uniform float u_dpr;',
+'uniform float u_time;',         // Reduced Motion時は固定値（静止画として成立）
+'uniform float u_wash;',         // ウォッシュ強度 0..1
+'uniform float u_bokehAlpha;',   // Bokeh全体の透明度倍率 0..1
+'uniform float u_bokehCount;',   // 0..9（Quality low時はrichでも半減）
+'uniform vec4  u_contentRect;',  // x,y,w,h (CSS px) — UI背後の減衰領域
+'',
+'float hash21(vec2 p){ p = fract(p*vec2(123.34,345.45)); p += dot(p, p+34.345); return fract(p.x*p.y); }',
+'float vnoise(vec2 p){',
+'  vec2 i = floor(p); vec2 f = fract(p);',
+'  f = f*f*(3.0-2.0*f);',
+'  return mix(mix(hash21(i), hash21(i+vec2(1.0,0.0)), f.x),',
+'             mix(hash21(i+vec2(0.0,1.0)), hash21(i+vec2(1.0,1.0)), f.x), f.y);',
+'}',
+'float fbm3(vec2 p){',
+'  float v = 0.0; float a = 0.5;',
+'  for (int i = 0; i < 3; i++) { v += a * vnoise(p); p *= 2.03; a *= 0.5; }',
+'  return v;',
+'}',
+'',
+'void main(){',
+'  vec2 px = gl_FragCoord.xy / u_dpr;',
+'  px.y = u_res.y - px.y;',                                  // CSS座標系（y下向き）へ
+'  vec3 cIce = vec3(0.749, 0.878, 0.933);',                  // Ice Blue #BFE0EE
+'  vec3 acc = vec3(0.0);',
+'  float accA = 0.0;',
+'',
+// ---- (a) 水面ウォッシュ: fbm 3オクターブ・周期60秒級・彩度極低 ----
+'  if (u_wash > 0.001) {',
+'    float t = u_time * 0.0166;',                            // 1周期 ≒ 60秒オーダー
+'    vec2 q = px / max(u_res.x, u_res.y);',
+'    float n1 = fbm3(q * 1.7 + vec2(t * 0.7, -t * 0.5));',
+'    float n2 = fbm3(q * 0.9 + vec2(-t * 0.4, t * 0.3) + 13.7);',
+'    float w = smoothstep(0.30, 0.90, n1 * 0.6 + n2 * 0.6);',
+'    vec3 washCol = mix(vec3(1.0), cIce, 0.30 + 0.35 * n2);',// 白〜淡Ice Blueのみ
+'    float washA = u_wash * (0.035 + 0.10 * w);',
+'    acc += washCol * washA; accA += washA;',
+'  }',
+'',
+// ---- (b) Soft Bokeh Orbs: 直径100〜400px相当・opacity 0.05〜0.12・超低速漂流 ----
+'  if (u_bokehAlpha > 0.001) {',
+'    for (int i = 0; i < 9; i++) {',
+'      if (float(i) >= u_bokehCount - 0.5) break;',
+'      float fi = float(i);',
+'      float h1 = hash21(vec2(fi * 1.3 + 0.7, fi * 2.1 + 3.1));',
+'      float h2 = hash21(vec2(fi * 3.7 + 1.9, fi * 0.9 + 7.7));',
+'      float h3 = hash21(vec2(fi * 5.1 + 2.3, fi * 1.7 + 4.9));',
+'      float sp = 0.006 + 0.010 * h3;',                      // 1漂流周期 ≒ 100〜170秒
+'      vec2 c = vec2(u_res.x * (0.5 + 0.45 * sin(u_time * sp + h1 * 6.28318)),',
+'                    u_res.y * (0.5 + 0.45 * cos(u_time * sp * 0.83 + h2 * 6.28318)));',
+'      float R = 50.0 + 150.0 * h2;',                        // 半径50〜200px（直径100〜400px）
+'      float d = length(px - c);',
+'      float g = exp(-(d * d) / (R * R * 0.55));',           // radial gradientのblur感
+'      vec3 oc = mix(vec3(1.0), cIce, 0.15 + 0.45 * h3);',
+'      float a = g * (0.05 + 0.07 * h1) * u_bokehAlpha;',
+'      acc += oc * a; accA += a;',
+'    }',
+'  }',
+'',
+// ---- 可読性: コンテンツ矩形背後の減衰（粒子側と同じ式・全プリセット共通） ----
+'  float inX = smoothstep(u_contentRect.x - 40.0, u_contentRect.x + 40.0, px.x)',
+'            * (1.0 - smoothstep(u_contentRect.x + u_contentRect.z - 40.0, u_contentRect.x + u_contentRect.z + 40.0, px.x));',
+'  float inY = smoothstep(u_contentRect.y - 40.0, u_contentRect.y + 40.0, px.y)',
+'            * (1.0 - smoothstep(u_contentRect.y + u_contentRect.w - 40.0, u_contentRect.y + u_contentRect.w + 40.0, px.y));',
+'  accA *= (1.0 - inX * inY * 0.6667);',
+'',
+'  if (accA < 0.002) discard;',
+'  gl_FragColor = vec4(acc / max(accA, 0.001), min(accA, 0.35));', // 総量0.35上限で本文コントラスト保護
 '}'
 ].join('\n');
 
@@ -876,9 +982,24 @@ function createAmbientEngine(canvas) {
 
   const U = {};
   ['u_time','u_resolution','u_dpr','u_mouse','u_mouseStrength','u_contentRect','u_detail',
+   'u_presetAlpha','u_presetSize',
    'u_motionMode','u_motionStrength','u_motionPhase','u_focus','u_nodeA','u_nodeB','u_nodeC',
    'u_morphBlend','u_morphShape','u_morphCenter','u_morphRadius','u_ripples[0]'
   ].forEach(n => { U[n] = gl.getUniformLocation(prog, n); });
+
+  // ---- 雰囲気強度: ウォッシュ/Bokeh用フルスクリーンパス（コンパイル失敗時は粒子のみで継続） ----
+  let washProg = null, washBuf = null, washLocPos = -1;
+  const WU = {};
+  try {
+    washProg = compileProgram(gl, WASH_VS, WASH_FS);
+    washBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, washBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    washLocPos = gl.getAttribLocation(washProg, 'a_pos');
+    ['u_res','u_dpr','u_time','u_wash','u_bokehAlpha','u_bokehCount','u_contentRect']
+      .forEach(n => { WU[n] = gl.getUniformLocation(washProg, n); });
+  } catch (e) { washProg = null; }
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf); // 粒子バッファへ戻す（attach順序の整合を維持）
 
   let cssW = 0, cssH = 0, curDpr = 1;
   function resize(dpr) {
@@ -895,10 +1016,36 @@ function createAmbientEngine(canvas) {
     get dpr() { return curDpr; },
     render(t, s) {
       // s: {count, detail, mouse[2], mouseStrength, contentRect[4],
+      //     presetAlpha, presetSize, washStrength, bokehAlpha, bokehCount, washTime,
       //     motionMode, motionStrength, motionPhase, focus[2], nodeA, nodeB, nodeC,
       //     morphBlend, morphShape, morphCenter[2], morphRadius, ripples(Float32Array 16)}
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
+
+      // ---- 先に水面ウォッシュ/Bokeh（雰囲気強度 standard/rich のみ描画） ----
+      const washOn = washProg &&
+        (s.washStrength > 0.001 || (s.bokehAlpha > 0.001 && s.bokehCount > 0.5));
+      if (washOn) {
+        gl.useProgram(washProg);
+        gl.bindBuffer(gl.ARRAY_BUFFER, washBuf);
+        gl.enableVertexAttribArray(washLocPos);
+        gl.vertexAttribPointer(washLocPos, 2, gl.FLOAT, false, 0, 0);
+        gl.uniform2f(WU['u_res'], cssW, cssH);
+        gl.uniform1f(WU['u_dpr'], curDpr);
+        gl.uniform1f(WU['u_time'], s.washTime);
+        gl.uniform1f(WU['u_wash'], s.washStrength);
+        gl.uniform1f(WU['u_bokehAlpha'], s.bokehAlpha);
+        gl.uniform1f(WU['u_bokehCount'], s.bokehCount);
+        gl.uniform4f(WU['u_contentRect'], s.contentRect[0], s.contentRect[1], s.contentRect[2], s.contentRect[3]);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        // 粒子プログラムへ復帰し、attribポインタを粒子バッファへ張り直す
+        gl.useProgram(prog);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.vertexAttribPointer(locSeed, 2, gl.FLOAT, false, 16, 0);
+        gl.vertexAttribPointer(locT, 1, gl.FLOAT, false, 16, 8);
+        gl.vertexAttribPointer(locRand, 1, gl.FLOAT, false, 16, 12);
+      }
+
       gl.uniform1f(U['u_time'], t);
       gl.uniform2f(U['u_resolution'], cssW, cssH);
       gl.uniform1f(U['u_dpr'], curDpr);
@@ -906,6 +1053,8 @@ function createAmbientEngine(canvas) {
       gl.uniform1f(U['u_mouseStrength'], s.mouseStrength);
       gl.uniform4f(U['u_contentRect'], s.contentRect[0], s.contentRect[1], s.contentRect[2], s.contentRect[3]);
       gl.uniform1f(U['u_detail'], s.detail);
+      gl.uniform1f(U['u_presetAlpha'], s.presetAlpha);
+      gl.uniform1f(U['u_presetSize'], s.presetSize);
       gl.uniform1f(U['u_motionMode'], s.motionMode);
       gl.uniform1f(U['u_motionStrength'], s.motionStrength);
       gl.uniform1f(U['u_motionPhase'], s.motionPhase);
@@ -1247,6 +1396,14 @@ function frame(nowMs) {
     let count = Math.floor(ambient.maxCount * q.mult);
     if (reducedMotion) count = Math.floor(count / 4);
 
+    // ---- 雰囲気強度プリセット解決（Owner Review比較用） ----
+    const preset = AMBIENT_PRESETS[Flags.get('ambientPreset')] || AMBIENT_PRESETS.standard;
+    let bokehCount = preset.bokehCount;
+    if (Governor.tier === 'low') bokehCount = Math.ceil(bokehCount / 2); // Quality low時はrichでも半減
+    // Reduced Motion優先: ウォッシュ/Bokehは静止（固定時刻）+ 強度を下げる
+    const washMul = reducedMotion ? 0.6 : 1.0;
+    const washTime = reducedMotion ? 120.0 : t;
+
     const m = fx('meaningfulMotion') ? Motion.sample(t) : { mode: 0, strength: 0, phase: 0, focus: [0, 0] };
     Ripples.prune(t);
 
@@ -1272,6 +1429,12 @@ function frame(nowMs) {
       mouse: [mouse.lx, mouse.ly],
       mouseStrength: fx('cursorInteraction') ? 1 : 0,
       contentRect,
+      presetAlpha: preset.alpha,
+      presetSize: preset.size,
+      washStrength: preset.wash * washMul,
+      bokehAlpha: preset.bokehAlpha * washMul,
+      bokehCount,
+      washTime,
       motionMode: m.mode,
       motionStrength: m.strength,
       motionPhase: m.phase,
@@ -1375,6 +1538,19 @@ document.querySelectorAll('[data-quality]').forEach(btn => {
   });
   btn.setAttribute('aria-pressed', String(btn.getAttribute('data-quality') === Flags.get('quality')));
 });
+
+/* ---- 雰囲気強度プリセット（Owner Review比較用 / localStorage保存） ---- */
+document.querySelectorAll('[data-preset]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    Flags.set('ambientPreset', btn.getAttribute('data-preset'));
+    document.querySelectorAll('[data-preset]').forEach(b =>
+      b.setAttribute('aria-pressed', String(b === btn)));
+    document.getElementById('preset-current').textContent = Flags.get('ambientPreset');
+    ensureLoop();
+  });
+  btn.setAttribute('aria-pressed', String(btn.getAttribute('data-preset') === Flags.get('ambientPreset')));
+});
+document.getElementById('preset-current').textContent = Flags.get('ambientPreset');
 
 function applyFlagVisibility() {
   const bgOn = fx('ambientParticles');

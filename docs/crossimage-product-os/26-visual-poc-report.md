@@ -97,3 +97,10 @@ PoCからの削除は0件（全てFlagで個別無効化可能なため、判断
 残余確認事項（オーナー閲覧時に自然に確認可能）: 実GPU環境でのFPS体感、スマートフォン実機、Orb/Soundの好み。
 
 **オーナーのVisual Approvalまで、Design System・本番9画面への展開・Business Logic実装は行わない。**
+
+## 12. 追補（v1.1・2026-08-11）: オーナー参考イメージ受領と雰囲気強度プリセット
+
+- オーナーよりVisual参考4点（水面調フロストのダッシュボードモック、Particle Love、USTA、Active Theory XR）を受領。ダーク系参考は「動きの質」の参照に留め、白基調は不変。
+- Owner Review（実装順の手順4）で「控えめ⇔豊か」を比較できるよう、PoCへ**雰囲気強度プリセット3段階**を追加（+179行）: `subtle`=v1.0と同一 / `standard`=粒子1.3倍+弱い水面ウォッシュ / `rich`=参考モック方向（水面ウォッシュ+Soft Bokeh Orbs 7個・白〜Ice Blueのみ）。既定は `standard`。
+- 3プリセットすべてで可読性原則（コンテンツ背後1/3減光）・Reduced Motion・Quality Governor・全Effect OFFを維持（Chromium再検証: エラー0件）。ソフトウェア描画FPSは subtle 19 / standard 11 / rich 9（ウォッシュパス追加分。実GPUでは問題ない見込み、richはlow品質時Bokeh半減で自動緩和）。
+- Presentation Layer分離原則・実装順6段階（21番§3.1第5・6項）に基づき、本プリセットもARCHITECTURE_LOCK対象外の継続変更可パラメータである。
