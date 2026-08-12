@@ -57,6 +57,7 @@ Phase 1以降も存在し続けるリスク。仕組みではなく運用・契�
 4. **Visual Effect（Ambient Particle / WebGL / Audio等の視覚・聴覚演出）を将来実装する場合は、Security / Performance / Accessibility のGateを通す構造とし、Business Logicと分離する**（v1.2追記・オーナー指定〔2026-08-11承認の付帯〕。Backlogルールとして記録）。
 5. **Presentation Layer分離原則（v1.3追記・オーナー指定〔2026-08-11〕）**: 粒子・流体・水面・光・Glass・Ripple・Soundは、Business Architectureと分離した **UI/UX内の Visual Design / Motion Design / Interaction Design / Sound Design Layer（Presentation Layer）** として扱う。**Phase 0 ARCHITECTURE_LOCKの対象にせず、後から継続的に変更可能**とする。Visual EffectはBusiness Logic・State Machine・Data Modelと直接密結合させず、**業務State→Visual LayerへのEvent渡し**（抽象State名のみ。機微データ不可=25番§9.4整合）とし、Visual Effectの変更・削除がBusiness Functionに影響しない構造を必須とする。
 6. **Visual実装順（v1.3追記・オーナー指定）**: (1)本体Frontend Architecture確定 → (2)Visual PoC専用ページ作成〔完了・poc/visual-poc.html〕 → (3)Particle/Flow/Ripple/Orb/Glass/Soundの個別確認〔完了・26番〕 → (4)Visual DirectionのOwner Review → (5)承認後に Design Token / Motion Token 化 → (6)Dashboard・Project等へ段階的展開。**最初のVertical Sliceでは業務機能完成を優先し、Visual PoCは並行レーンで実施する**。
+7. **最上位目的の再固定と新機能ジャスティフィケーション義務（v1.4追記・オーナー指定〔2026-08-11〕）**: 本OSの目的は「顧客の曖昧な商品アイデアを、中国の工場で実際に生産・品質管理・輸入・納品できる状態まで変換し、その過程をAIとシステムで極力自動化し、人間は提案・交渉・判断・承認・例外対応に集中するためのOEM/ODM事業OS」である。成功条件は機能数ではなく: ①顧客の手間が少ない ②Crossimageの手作業が少ない ③中国側の手間が少ない ④クレームが少ない ⑤利益が見える ⑥案件数を増やしても人が増えすぎない ⑦リピート時は前回より簡単。**以後、新しい機能・文書・演出を追加する前に、それが上記のどれを改善するか（顧客・Crossimage・中国側の手間削減 / 案件成立率 / 品質・利益・納期）を必ず説明する。説明できないものは作らない。** Architecture・Security・UX・Design System・Particle・WebGLはすべて目的実現のための部品であり、部品が目的に先行してはならない。
 
 ## 4. Phase 1開始の前提条件（再掲）
 
