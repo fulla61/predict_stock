@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<title>Crossimage Visual PoC</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* ============================================================
+   Crossimage Visual PoC — "Ambient Interactive Interface"
+   単一テーマ（ライト固定）/ 完全自己完結 / Mock Dataのみ
+   ============================================================ */
+:root{
+  --ground:#FBFCFE;
+  --text:#1C2733;
+  --sub:#5A6B7C;
+  --accent:#7FB8D8;
+  --ice:#BFE0EE;
+  --glass:rgba(255,255,255,0.72);
+  --glass-border:rgba(160,190,210,0.25);
+  --surface:#FFFFFF;
+  --line:rgba(160,190,210,0.30);
+  --chip-blue-bg:#EAF3F9;  --chip-blue-fg:#3E6E8C;
+  --chip-green-bg:#EAF5EE; --chip-green-fg:#3D7A55;
+  --chip-amber-bg:#F8F1E3; --chip-amber-fg:#8A6D2F;
+  --radius:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--ground);
+  color:var(--text);
+  font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic",Meiryo,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:15px;
+  line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+}
+
+/* ---- background canvas (PHASE A) ---- */
+#bg-canvas{
+  position:fixed;inset:0;width:100%;height:100%;
+  z-index:0;pointer-events:none;display:block;
+}
+/* WebGL不可時の静的fallback */
+.bg-fallback{
+  display:none;position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(1000px 600px at 15% 10%, rgba(191,224,238,0.28), transparent 65%),
+    radial-gradient(900px 700px at 85% 70%, rgba(127,184,216,0.14), transparent 60%),
+    var(--ground);
+}
+body.no-webgl .bg-fallback{display:block}
+body.no-webgl #bg-canvas{display:none}
+
+/* ---- layout ---- */
+.container{
+  position:relative;z-index:1;
+  max-width:880px;margin:0 auto;
+  padding:32px 24px 80px;
+}
+section{margin-top:56px}
+.section-label{
+  font-size:11px;letter-spacing:0.14em;color:var(--accent);
+  font-weight:600;text-transform:uppercase;margin-bottom:8px;
+}
+h2{font-size:22px;font-weight:600;letter-spacing:0.01em;margin-bottom:6px}
+.section-desc{color:var(--sub);font-size:13.5px;margin-bottom:20px}
+
+/* ---- header ---- */
+header.site{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+  padding-top:8px;
+}
+header.site h1{font-size:26px;font-weight:600;letter-spacing:0.01em}
+header.site .tagline{color:var(--sub);font-size:13.5px;margin-top:4px}
+
+/* ---- notices ---- */
+.notice{
+  display:none;margin-top:14px;padding:8px 14px;border-radius:10px;
+  background:var(--chip-blue-bg);color:var(--chip-blue-fg);
+  font-size:12.5px;
+}
+.notice.show{display:inline-block}
+.notice.warn{background:var(--chip-amber-bg);color:var(--chip-amber-fg)}
+
+/* ---- buttons (共通) ---- */
+button{
+  font-family:inherit;font-size:14px;color:var(--text);
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:8px 16px;cursor:pointer;
+  transition:background-color .3s ease, border-color .3s ease, box-shadow .3s ease;
+}
+button:hover{background:#F4F9FC;border-color:rgba(127,184,216,0.55)}
+button:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+button:disabled{opacity:.45;cursor:default}
+.btn-primary{
+  background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;
+}
+.btn-primary:hover{background:#6FABCE;border-color:#6FABCE}
+.btn-ghost{background:transparent}
+
+/* ---- feature flag drawer (歯車 + Drawer) ---- */
+.gear-btn{
+  width:42px;height:42px;border-radius:50%;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;line-height:1;flex:none;
+}
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;width:320px;max-width:88vw;
+  z-index:40;
+  background:var(--glass);
+  border-left:1px solid var(--glass-border);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  box-shadow:-8px 0 32px rgba(90,120,150,0.08);
+  padding:22px 20px 32px;overflow-y:auto;
+  transform:translateX(102%);visibility:hidden;
+  transition:transform .45s cubic-bezier(.22,.8,.35,1), visibility .45s;
+}
+.drawer.open{transform:translateX(0);visibility:visible}
+@media (prefers-reduced-motion: reduce){ .drawer{transition:none} }
+.drawer h2{font-size:16px;margin-bottom:2px}
+.drawer .drawer-sub{font-size:12px;color:var(--sub);margin-bottom:16px}
+.drawer-close{position:absolute;top:14px;right:14px;padding:4px 10px;font-size:13px}
+.flag-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:9px 0;border-bottom:1px solid rgba(160,190,210,0.16);
+}
+.flag-row .flag-name{font-size:13.5px}
+.flag-row .flag-name small{display:block;color:var(--sub);font-size:11px;line-height:1.4}
+/* switch (button role=switch) */
+.switch{
+  width:44px;height:24px;border-radius:12px;padding:2px;flex:none;
+  background:#DDE6EC;border:1px solid var(--line);
+  position:relative;transition:background-color .25s ease;
+}
+.switch::after{
+  content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;
+  border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(28,39,51,0.18);
+  transition:transform .25s ease;
+}
+.switch[aria-checked="true"]{background:var(--accent)}
+.switch[aria-checked="true"]::after{transform:translateX(20px)}
+.master-row{margin:6px 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,0.6)}
+.quality-group{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.quality-group button{padding:5px 12px;font-size:12.5px;border-radius:8px}
+.quality-group button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.drawer h3{font-size:13px;margin-top:18px;margin-bottom:4px;color:var(--sub);font-weight:600}
+
+/* ---- glass card（乱用禁止: Decision Cardと主要カードのみ） ---- */
+.glass-card{
+  background:var(--glass);
+  border:1px solid var(--glass-border);
+  border-radius:var(--radius);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  box-shadow:0 6px 28px rgba(90,120,150,0.07);
+  padding:26px 28px;
+}
+/* 白面カード（Typography検証・Table用） */
+.plain-card{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:26px 28px;
+}
+
+/* ---- status chips ---- */
+.chip{
+  display:inline-block;font-size:12px;font-weight:600;
+  padding:3px 12px;border-radius:999px;line-height:1.6;
+  background:var(--chip-blue-bg);color:var(--chip-blue-fg);
+}
+.chip.green{background:var(--chip-green-bg);color:var(--chip-green-fg)}
+.chip.amber{background:var(--chip-amber-bg);color:var(--chip-amber-fg)}
+.chip.idle{background:#EFF3F6;color:var(--sub)}
+
+/* ---- decision card ---- */
+.dc-meta{display:flex;flex-wrap:wrap;gap:24px;margin-bottom:18px}
+.dc-meta .kv .k{font-size:11px;letter-spacing:0.12em;color:var(--sub);font-weight:600}
+.dc-meta .kv .v{font-size:15px;font-weight:600;margin-top:2px}
+.dc-next{font-size:16px;font-weight:600;margin:6px 0 16px}
+.option-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.option-card{
+  text-align:left;padding:16px 18px;border-radius:12px;
+  border:1px solid var(--line);background:rgba(255,255,255,0.85);
+  display:block;width:100%;
+}
+.option-card:hover{border-color:var(--accent)}
+.option-card[aria-pressed="true"]{
+  border-color:var(--accent);
+  box-shadow:0 0 0 1px var(--accent), 0 4px 16px rgba(127,184,216,0.18);
+}
+.option-card .opt-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.option-card .opt-key{font-weight:700;font-size:15px}
+.option-card .opt-tag{font-size:11px;font-weight:600;color:var(--accent)}
+.option-card .opt-price{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;margin-bottom:6px}
+.option-card .opt-note{font-size:12.5px;color:var(--sub);line-height:1.6}
+.dc-actions{display:flex;align-items:center;gap:14px;margin-top:18px;flex-wrap:wrap}
+.dc-approved-msg{font-size:13px;color:var(--chip-green-fg);display:none}
+.dc-approved-msg.show{display:inline}
+
+/* ---- typography section ---- */
+.type-sample h1{font-size:30px;font-weight:600;letter-spacing:0.01em}
+.type-sample h2{font-size:22px;margin-top:18px}
+.type-sample h3{font-size:17px;font-weight:600;margin-top:16px}
+.type-sample h4{font-size:14px;font-weight:600;color:var(--sub);margin-top:14px;letter-spacing:0.04em}
+.type-sample p{margin-top:8px;max-width:38em}
+.num{font-variant-numeric:tabular-nums}
+.price-lg{font-size:32px;font-weight:600;letter-spacing:0.01em}
+.price-lg .unit{font-size:14px;color:var(--sub);font-weight:400;margin-left:4px}
+.type-row{display:flex;gap:36px;flex-wrap:wrap;margin-top:20px;align-items:flex-end}
+.type-row .kv .k{font-size:11px;letter-spacing:0.12em;color:var(--sub);font-weight:600}
+.chip-row{display:flex;gap:8px;margin-top:20px;flex-wrap:wrap;align-items:center}
+table.mock{
+  width:100%;border-collapse:collapse;margin-top:22px;font-size:13.5px;
+}
+table.mock caption{text-align:left;font-size:12px;color:var(--sub);margin-bottom:8px}
+table.mock th{
+  text-align:left;font-size:11.5px;letter-spacing:0.08em;color:var(--sub);
+  font-weight:600;padding:8px 12px;border-bottom:1px solid var(--line);
+}
+table.mock td{
+  padding:10px 12px;border-bottom:1px solid rgba(160,190,210,0.16);
+}
+table.mock td.num,table.mock th.num{text-align:right}
+
+/* ---- motion demo ---- */
+.motion-btns{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.motion-state-line{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:12px 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface);
+}
+.motion-state-line .msg{font-size:13.5px;color:var(--sub)}
+.loop-stage{
+  position:relative;height:150px;margin-top:16px;border:1px dashed var(--line);
+  border-radius:12px;
+}
+.loop-node{
+  position:absolute;transform:translate(-50%,-50%);text-align:center;
+}
+.loop-node .dot{
+  width:10px;height:10px;border-radius:50%;background:var(--accent);
+  margin:0 auto 5px;box-shadow:0 0 0 4px rgba(127,184,216,0.18);
+}
+.loop-node .lbl{font-size:11.5px;color:var(--sub);letter-spacing:0.06em;font-weight:600}
+.loop-node.customer{left:15%;top:70%}
+.loop-node.crossimage{left:50%;top:26%}
+.loop-node.factory{left:85%;top:70%}
+
+/* ---- morph demo ---- */
+.morph-controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.morph-stage{
+  height:220px;border:1px dashed var(--line);border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--sub);font-size:12.5px;
+}
+.shape-group button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ---- orb demo ---- */
+.orb-wrap{display:flex;gap:28px;flex-wrap:wrap;align-items:center}
+#orb-canvas{
+  width:240px;height:240px;border-radius:16px;display:block;
+  border:1px solid var(--line);background:var(--surface);
+}
+.orb-side{min-width:240px;flex:1}
+.orb-states{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.orb-states button{font-size:12.5px;padding:6px 12px}
+.orb-states button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.orb-state-text{font-size:14px;margin-top:4px}
+.orb-off-note{display:none;font-size:12.5px;color:var(--sub)}
+body.orb-off #orb-canvas{display:none}
+body.orb-off .orb-off-note{display:block}
+
+/* ---- sound demo ---- */
+.sound-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.sound-note{font-size:12.5px;color:var(--sub);margin-top:10px}
+
+/* ---- debug ---- */
+#debug{
+  position:fixed;left:12px;bottom:12px;z-index:30;
+  font-size:11px;color:var(--sub);
+  background:rgba(255,255,255,0.8);border:1px solid var(--line);
+  border-radius:8px;padding:4px 10px;
+  font-variant-numeric:tabular-nums;pointer-events:none;
+  display:none;
+}
+#debug.show{display:block}
+
+/* ---- footer ---- */
+footer.site{
+  margin-top:72px;padding-top:20px;border-top:1px solid var(--line);
+  color:var(--sub);font-size:12.5px;
+}
+</style>
+</head>
+<body>
+
+<!-- ======================================================================
+     PHASE A : 背景Canvas（Stateless GPU Particles）+ WebGL不可fallback
+     ※ Shaderへ渡すのは抽象的な数値State（mode番号・座標・時刻）のみ。
+        Business文言・金額等の機微データは一切渡さない。
+     ====================================================================== -->
+<canvas id="bg-canvas" aria-hidden="true"></canvas>
+<div class="bg-fallback" aria-hidden="true"></div>
+
+<div class="container" id="main-column">
+
+  <!-- ==================== 1. Header + Feature Flag Drawer ==================== -->
+  <header class="site">
+    <div>
+      <h1>Crossimage Visual PoC</h1>
+      <p class="tagline">Ambient Interactive Interface — 水と空気のように静かな、清潔で精密な画面の技術検証</p>
+      <span id="notice-reduced" class="notice">Reduced Motionモード適用中（粒子1/4・Cursor/Morph停止・Ripple最小化）</span>
+      <span id="notice-nowebgl" class="notice warn">WebGLを利用できないため、静的な背景にフォールバックしています</span>
+    </div>
+    <button id="gear-btn" class="gear-btn" aria-expanded="false" aria-controls="flag-drawer" title="Feature Flags">&#9881;<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Feature Flagパネルを開く</span></button>
+  </header>
+
+  <aside id="flag-drawer" class="drawer" aria-label="Feature Flags">
+    <button id="drawer-close" class="drawer-close">閉じる</button>
+    <h2>Feature Flags</h2>
+    <p class="drawer-sub">各Effectは個別にON/OFF可能（localStorageに保存）。OFF時はループ停止でCPU/GPUを解放します。</p>
+
+    <div class="master-row flag-row" style="border-bottom:none">
+      <span class="flag-name"><strong>全Effect OFF</strong><small>Business UIのみで表示（Effect分離検証）</small></span>
+      <button class="switch" id="flag-masterOff" role="switch" aria-checked="false" aria-label="全Effect OFF"></button>
+    </div>
+
+    <div class="flag-row"><span class="flag-name">ambientParticles<small>背景の環境粒子</small></span>
+      <button class="switch" data-flag="ambientParticles" role="switch" aria-checked="true" aria-label="ambientParticles"></button></div>
+    <div class="flag-row"><span class="flag-name">cursorInteraction<small>カーソルへの緩やかな反発</small></span>
+      <button class="switch" data-flag="cursorInteraction" role="switch" aria-checked="true" aria-label="cursorInteraction"></button></div>
+    <div class="flag-row"><span class="flag-name">clickRipple<small>Primary Actionのみの波紋</small></span>
+      <button class="switch" data-flag="clickRipple" role="switch" aria-checked="true" aria-label="clickRipple"></button></div>
+    <div class="flag-row"><span class="flag-name">meaningfulMotion<small>State駆動の意味のある動き</small></span>
+      <button class="switch" data-flag="meaningfulMotion" role="switch" aria-checked="true" aria-label="meaningfulMotion"></button></div>
+    <div class="flag-row"><span class="flag-name">particleMorph<small>粒子の形状集合デモ</small></span>
+      <button class="switch" data-flag="particleMorph" role="switch" aria-checked="true" aria-label="particleMorph"></button></div>
+    <div class="flag-row"><span class="flag-name">liquidOrb<small>SDF/noiseによる透明Orb</small></span>
+      <button class="switch" data-flag="liquidOrb" role="switch" aria-checked="true" aria-label="liquidOrb"></button></div>
+    <div class="flag-row"><span class="flag-name">sound<small>WebAudio合成音（Default OFF）</small></span>
+      <button class="switch" data-flag="sound" role="switch" aria-checked="false" aria-label="sound"></button></div>
+    <div class="flag-row"><span class="flag-name">Debug表示<small>FPS / 粒子数 / Quality</small></span>
+      <button class="switch" data-flag="showDebug" role="switch" aria-checked="true" aria-label="Debug表示"></button></div>
+
+    <h3>Quality（<span id="quality-current">auto</span>）</h3>
+    <div class="quality-group" role="group" aria-label="Quality選択">
+      <button data-quality="auto" aria-pressed="true">auto</button>
+      <button data-quality="high" aria-pressed="false">high</button>
+      <button data-quality="med" aria-pressed="false">med</button>
+      <button data-quality="low" aria-pressed="false">low</button>
+    </div>
+  </aside>
+
+  <!-- ==================== 2. Mock Decision Card (Glass) ==================== -->
+  <section aria-labelledby="sec-decision">
+    <p class="section-label">Mock Decision Card</p>
+    <h2 id="sec-decision">意思決定カード（Business UI代表例）</h2>
+    <p class="section-desc">Glass Card上での判断UI。Option選択と承認がPrimary Action（Ripple対象）。データは全てMockです。</p>
+
+    <div class="glass-card" id="decision-card">
+      <div class="dc-meta">
+        <div class="kv"><div class="k">PROJECT</div><div class="v">オリジナル商品開発</div></div>
+        <div class="kv"><div class="k">STATUS</div><div class="v"><span class="chip" id="dc-status">工場条件確認完了</span></div></div>
+      </div>
+      <p class="dc-next">NEXT DECISION — 進め方を選択してください</p>
+      <div class="option-grid" role="group" aria-label="進め方の選択肢">
+        <button class="option-card js-option js-primary" data-option="A" aria-pressed="false">
+          <span class="opt-head"><span class="opt-key">Option A</span><span class="opt-tag">おすすめ</span></span>
+          <span class="opt-price num">概算 ¥1,180 / 個・1,000個〜</span>
+          <span class="opt-note">納期とコストのバランスが良い標準構成。<br>工場実績のある仕様で品質リスクが低い。</span>
+        </button>
+        <button class="option-card js-option js-primary" data-option="B" aria-pressed="false">
+          <span class="opt-head"><span class="opt-key">Option B</span><span class="opt-tag">小ロット優先</span></span>
+          <span class="opt-price num">概算 ¥1,420 / 個・300個〜</span>
+          <span class="opt-note">初回の在庫リスクを最小化できる構成。<br>単価は上がるが市場検証に適する。</span>
+        </button>
+        <button class="option-card js-option js-primary" data-option="C" aria-pressed="false">
+          <span class="opt-head"><span class="opt-key">Option C</span><span class="opt-tag">価格優先</span></span>
+          <span class="opt-price num">概算 ¥980 / 個・3,000個〜</span>
+          <span class="opt-note">単価を最優先する大ロット構成。<br>保管と資金繰りの負担は増える。</span>
+        </button>
+      </div>
+      <div class="dc-actions">
+        <button id="approve-btn" class="btn-primary js-primary" disabled>承認する</button>
+        <span id="dc-approved-msg" class="dc-approved-msg">承認しました（APPROVED演出）</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 3. Typography検証（白面） ==================== -->
+  <section aria-labelledby="sec-type">
+    <p class="section-label">Typography</p>
+    <h2 id="sec-type">階層可読性の検証（システムフォント）</h2>
+    <p class="section-desc">フォントは未決定。白面上で日本語・英数字・価格・数量・Status・Tableの可読性基準のみを確認します。</p>
+
+    <div class="plain-card type-sample">
+      <h1>見出しレベル1 — 商品開発の進行状況</h1>
+      <h2>見出しレベル2 — 工場との条件調整</h2>
+      <h3>見出しレベル3 — サンプル仕様の確認</h3>
+      <h4>見出しレベル4 — 補足事項</h4>
+      <p>本文サンプル。清潔で静かな画面の上で、日本語の本文がどの程度の行間・字間で快適に読めるかを検証します。数字は 12,800 のように等幅（tabular-nums）で揃えます。英数字 ABC abc 0123456789 との混植も確認します。</p>
+
+      <div class="type-row">
+        <div class="kv"><div class="k">価格表示</div><div class="price-lg num">¥12,800<span class="unit">（税込）</span></div></div>
+        <div class="kv"><div class="k">数量表示</div><div class="price-lg num" style="font-size:24px">1,000<span class="unit">個</span></div></div>
+        <div class="kv"><div class="k">単価</div><div class="num" style="font-size:18px;font-weight:600">¥1,240 <span style="font-size:12px;color:var(--sub);font-weight:400">/個</span></div></div>
+      </div>
+
+      <div class="chip-row" aria-label="Statusチップ見本">
+        <span class="chip">確認中</span>
+        <span class="chip green">承認済み</span>
+        <span class="chip amber">要対応</span>
+      </div>
+
+      <table class="mock">
+        <caption>Mock Table — 見積内訳（サンプル）</caption>
+        <thead>
+          <tr><th scope="col">項目</th><th scope="col" class="num">数量</th><th scope="col" class="num">単価</th><th scope="col">状態</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>本体（初回ロット）</td><td class="num">1,000 個</td><td class="num">¥1,240</td><td><span class="chip">確認中</span></td></tr>
+          <tr><td>個装パッケージ</td><td class="num">1,000 枚</td><td class="num">¥180</td><td><span class="chip green">承認済み</span></td></tr>
+          <tr><td>外箱・印刷</td><td class="num">250 枚</td><td class="num">¥420</td><td><span class="chip amber">要対応</span></td></tr>
+          <tr><td>海上輸送（1式）</td><td class="num">1 式</td><td class="num">¥68,000</td><td><span class="chip">確認中</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================== 4. Meaningful Motion Demo ==================== -->
+  <section aria-labelledby="sec-motion">
+    <p class="section-label">Meaningful Motion</p>
+    <h2 id="sec-motion">State駆動モーションのデモ</h2>
+    <p class="section-desc">抽象State名の発火で背景粒子が控えめに応答します。状態は必ずText/Statusチップでも同時に表現します（粒子のみでの状態表現はしません）。</p>
+
+    <div class="motion-btns">
+      <button class="js-motion" data-motion="FACTORY_RESPONSE_RECEIVED">FACTORY_RESPONSE_RECEIVED</button>
+      <button class="js-motion" data-motion="DECISION_REQUIRED">DECISION_REQUIRED</button>
+      <button class="js-motion" data-motion="APPROVED">APPROVED</button>
+      <button class="js-motion" data-motion="PROJECT_COMPLETED">PROJECT_COMPLETED</button>
+      <button class="js-motion" data-motion="COMMERCIAL_LOOP">COMMERCIAL_LOOP</button>
+    </div>
+
+    <div class="motion-state-line" role="status" aria-live="polite">
+      <span class="chip idle" id="motion-chip">Idle</span>
+      <span class="msg" id="motion-msg">待機中 — ボタンでStateを発火してください（演出は10秒以内に自然終了します）</span>
+    </div>
+
+    <div class="loop-stage" id="loop-stage" aria-label="Commercial Loopの3点（Customer / Crossimage / Factory）">
+      <div class="loop-node customer" id="node-customer"><div class="dot"></div><div class="lbl">CUSTOMER</div></div>
+      <div class="loop-node crossimage" id="node-crossimage"><div class="dot"></div><div class="lbl">CROSSIMAGE</div></div>
+      <div class="loop-node factory" id="node-factory"><div class="dot"></div><div class="lbl">FACTORY</div></div>
+    </div>
+  </section>
+
+  <!-- ==================== 5. Particle Morph Demo ==================== -->
+  <section aria-labelledby="sec-morph">
+    <p class="section-label">Particle Morph</p>
+    <h2 id="sec-morph">粒子の形状集合デモ</h2>
+    <p class="section-desc">Free Flow → Geometryへ集合 → Hold → Dissolve → Free Flow のサイクル。形状は円環と菱形の2種です。</p>
+
+    <div class="morph-controls">
+      <button id="morph-start" class="btn-primary" style="background:var(--accent)">Morphサイクル開始</button>
+      <span class="shape-group" role="group" aria-label="形状選択">
+        <button data-shape="ring" aria-pressed="true">円環</button>
+        <button data-shape="diamond" aria-pressed="false">菱形</button>
+      </span>
+      <span class="chip idle" id="morph-chip">Free Flow</span>
+    </div>
+    <div class="morph-stage" id="morph-stage">この領域の中心付近に粒子が集合します（背景レイヤー上の演出）</div>
+  </section>
+
+  <!-- ==================== 6. Liquid Orb Demo ==================== -->
+  <section aria-labelledby="sec-orb">
+    <p class="section-label">Liquid Orb</p>
+    <h2 id="sec-orb">SDF / noise シェーダーによる透明Orb</h2>
+    <p class="section-desc">白地に成立する淡い表現。Stateにより色味と脈動が僅かに変化します。State表示は常にテキストを併置します。</p>
+
+    <div class="orb-wrap">
+      <canvas id="orb-canvas" width="240" height="240" aria-hidden="true"></canvas>
+      <p class="orb-off-note">Liquid OrbはOFFです（Feature Flagで有効化できます）</p>
+      <div class="orb-side">
+        <div class="orb-state-text">現在のState: <strong id="orb-state-text">NORMAL</strong></div>
+        <div class="orb-states" role="group" aria-label="Orb State切替">
+          <button class="js-orb" data-orb="NORMAL" aria-pressed="true">NORMAL</button>
+          <button class="js-orb" data-orb="PROCESSING" aria-pressed="false">PROCESSING</button>
+          <button class="js-orb" data-orb="RESPONSE_RECEIVED" aria-pressed="false">RESPONSE_RECEIVED</button>
+          <button class="js-orb" data-orb="DECISION_REQUIRED" aria-pressed="false">DECISION_REQUIRED</button>
+          <button class="js-orb" data-orb="COMPLETED" aria-pressed="false">COMPLETED</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 7. Sound Demo ==================== -->
+  <section aria-labelledby="sec-sound">
+    <p class="section-label">Sound</p>
+    <h2 id="sec-sound">合成音のデモ（WebAudio / Default OFF）</h2>
+    <p class="section-desc">音声ファイルは使わず、AudioContextで水滴系の音を合成します。音量は極小（gain 0.05以下）です。</p>
+
+    <div class="sound-row">
+      <span style="font-size:13.5px">Sound</span>
+      <button class="switch" id="sound-toggle" role="switch" aria-checked="false" aria-label="Sound ON/OFF"></button>
+      <button class="js-sound" data-sound="primary">Primary Action音（小さな水滴）</button>
+      <button class="js-sound" data-sound="decision">Decision確定音（やや深い水滴）</button>
+      <button class="js-sound" data-sound="success">Success音（水滴+ガラス共鳴）</button>
+    </div>
+    <p class="sound-note" id="sound-note">Soundは現在OFFです。トグルをONにすると試聴できます。</p>
+  </section>
+
+  <!-- ==================== 8. Footer ==================== -->
+  <footer class="site">
+    <p>Visual Direction PoC — 本番画面ではありません。表示中のプロジェクト・金額・数量はすべてMock Dataです。</p>
+  </footer>
+
+</div><!-- /.container -->
+
+<div id="debug" class="show" aria-hidden="true">FPS -- / 粒子 -- / Quality --</div>
+
+<script>
+'use strict';
+/* =========================================================================
+ * Crossimage Visual PoC — Script
+ *   横断: FlagStore / QualityGovernor / MainLoop / Accessibility
+ *   PHASE A: AmbientEngine（Stateless GPU particles + cursor + content-dim）
+ *   PHASE B: RippleController / MotionController
+ *   PHASE C: MorphController / OrbEngine / AudioEngine
+ *
+ * 分離ポリシー:
+ *  - Visual EffectとBusiness UIはコード上分離。全Effect OFFでもUIは100%成立。
+ *  - Shader/Particle Engineへ渡すのは抽象State（mode番号・座標・時刻）のみ。
+ * ========================================================================= */
+
+/* ======================= 横断: Flag Store ======================= */
+const FLAG_KEY = 'crossimage-poc-flags-v1';
+const FLAG_DEFAULTS = {
+  ambientParticles: true,
+  cursorInteraction: true,
+  clickRipple: true,
+  meaningfulMotion: true,
+  particleMorph: true,
+  liquidOrb: true,
+  sound: false,
+  masterOff: false,
+  showDebug: true,
+  quality: 'auto'
+};
+const Flags = (() => {
+  let state = Object.assign({}, FLAG_DEFAULTS);
+  try {
+    const saved = JSON.parse(localStorage.getItem(FLAG_KEY) || '{}');
+    for (const k in FLAG_DEFAULTS) if (k in saved) state[k] = saved[k];
+  } catch (e) { /* localStorage不可でも動作継続 */ }
+  const listeners = [];
+  function save() { try { localStorage.setItem(FLAG_KEY, JSON.stringify(state)); } catch (e) {} }
+  return {
+    get: (k) => state[k],
+    set(k, v) { state[k] = v; save(); listeners.forEach(fn => fn(k, v)); },
+    onChange(fn) { listeners.push(fn); },
+    all: () => state
+  };
+})();
+
+const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let webglOK = true;   // AmbientEngine初期化で確定
+let orbGLOK = true;
+
+/* Effect有効判定（master・依存関係・WebGL可否を集約） */
+function fx(name) {
+  if (Flags.get('masterOff')) return false;
+  switch (name) {
+    case 'ambientParticles': return webglOK && Flags.get('ambientParticles');
+    case 'cursorInteraction': return fx('ambientParticles') && Flags.get('cursorInteraction') && !reducedMotion;
+    case 'clickRipple': return fx('ambientParticles') && Flags.get('clickRipple');
+    case 'meaningfulMotion': return fx('ambientParticles') && Flags.get('meaningfulMotion');
+    case 'particleMorph': return fx('ambientParticles') && Flags.get('particleMorph') && !reducedMotion;
+    case 'liquidOrb': return orbGLOK && Flags.get('liquidOrb');
+    case 'sound': return Flags.get('sound');
+    default: return false;
+  }
+}
+
+/* ======================= 横断: Quality Governor ======================= */
+const QUALITY_TIERS = {
+  high: { dpr: Math.min(window.devicePixelRatio || 1, 2), mult: 1.0, detail: 1.0 },
+  med:  { dpr: 1.0, mult: 0.6, detail: 0.6 },
+  low:  { dpr: 0.75, mult: 0.35, detail: 0.3 }
+};
+const Governor = (() => {
+  let tier = 'high';
+  let fpsAvg = 60;
+  let lastEval = 0;
+  let goodSince = 0;
+  return {
+    get tier() { return Flags.get('quality') === 'auto' ? tier : Flags.get('quality'); },
+    get fps() { return fpsAvg; },
+    frame(now, dt) {
+      if (dt > 0 && dt < 0.5) {
+        const inst = 1 / dt;
+        fpsAvg += (inst - fpsAvg) * 0.05; // rAF移動平均
+      }
+      if (Flags.get('quality') !== 'auto') return false;
+      if (now - lastEval < 2000) return false;
+      lastEval = now;
+      let changed = false;
+      if (fpsAvg < 45) {
+        if (tier === 'high') { tier = 'med'; changed = true; }
+        else if (tier === 'med') { tier = 'low'; changed = true; }
+        goodSince = now;
+      } else if (fpsAvg > 57) {
+        if (!goodSince) goodSince = now;
+        if (now - goodSince > 6000) {
+          if (tier === 'low') { tier = 'med'; changed = true; goodSince = now; }
+          else if (tier === 'med') { tier = 'high'; changed = true; goodSince = now; }
+        }
+      } else {
+        goodSince = now;
+      }
+      return changed;
+    }
+  };
+})();
+
+/* =========================================================================
+ * PHASE A : Ambient Particle Engine（素のWebGL / Stateless GPU方式）
+ *   各粒子はseed属性のみ保持し、頂点シェーダー内 flowField(seed, time) で
+ *   位置を算出。CPUで毎フレーム粒子更新は行わない。
+ * ========================================================================= */
+const AMBIENT_VS = [
+'precision highp float;',
+'attribute vec2 a_seed;',    // 粒子固有の乱数 (0..1)
+'attribute float a_t;',      // morph用パラメータ (0..1)
+'attribute float a_rand;',   // 追加乱数
+'uniform float u_time;',
+'uniform vec2  u_resolution;',   // CSS px
+'uniform float u_dpr;',
+'uniform vec2  u_mouse;',        // CSS px
+'uniform float u_mouseStrength;',
+'uniform vec4  u_contentRect;',  // x,y,w,h (CSS px) — UI背後の減光領域
+'uniform float u_detail;',       // shader複雑度 (Quality)
+// Meaningful Motion（抽象Stateのみ）: 0=idle 1=factory 2=decision 3=approved 4=completed 5=loop
+'uniform float u_motionMode;',
+'uniform float u_motionStrength;',
+'uniform float u_motionPhase;',
+'uniform vec2  u_focus;',
+'uniform vec2  u_nodeA;',
+'uniform vec2  u_nodeB;',
+'uniform vec2  u_nodeC;',
+// Morph
+'uniform float u_morphBlend;',
+'uniform float u_morphShape;',   // 0=ring 1=diamond
+'uniform vec2  u_morphCenter;',
+'uniform float u_morphRadius;',
+// Ripple (最大4)
+'uniform vec4  u_ripples[4];',   // x, y, startTime, strength
+'varying float v_alpha;',
+'varying vec3  v_color;',
+'',
+'float hash21(vec2 p){ p = fract(p*vec2(123.34,345.45)); p += dot(p, p+34.345); return fract(p.x*p.y); }',
+'float vnoise(vec2 p){',
+'  vec2 i = floor(p); vec2 f = fract(p);',
+'  f = f*f*(3.0-2.0*f);',
+'  float a = hash21(i);',
+'  float b = hash21(i+vec2(1.0,0.0));',
+'  float c = hash21(i+vec2(0.0,1.0));',
+'  float d = hash21(i+vec2(1.0,1.0));',
+'  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);',
+'}',
+'',
+// flowField: 非常にゆっくり（画面横断 ~100秒 order）+ 擬似curlの揺らぎ
+'vec2 flowField(vec2 seed, float t){',
+'  float spd = 0.55 + 0.9*hash21(seed+7.7);',
+'  vec2 p = seed + vec2(-0.010, 0.0038) * t * spd;',
+'  float n1 = vnoise(p*3.0 + t*0.03);',
+'  float n2 = vnoise(p*3.0 + vec2(31.7, 11.3) + t*0.03);',
+'  p += (vec2(n1,n2)-0.5)*0.10;',
+'  if (u_detail > 0.7) {',
+'    float n3 = vnoise(p*7.0 - t*0.02);',
+'    float n4 = vnoise(p*7.0 + vec2(5.1,9.4) - t*0.02);',
+'    p += (vec2(n3,n4)-0.5)*0.04;',
+'  }',
+'  return fract(p);',
+'}',
+'',
+'void main(){',
+'  vec2 uv = flowField(a_seed, u_time);',
+'  vec2 px = uv * u_resolution;',
+'  float extraGlow = 0.0;',
+'  float alphaMul = 1.0;',
+'',
+// ---- Meaningful Motion ----
+'  if (u_motionMode > 0.5 && u_motionMode < 1.5) {',           // FACTORY_RESPONSE: 右→左の静かな光の帯
+'    float bandX = (1.0 - u_motionPhase) * (u_resolution.x + 500.0) - 250.0;',
+'    float d = px.x - bandX;',
+'    float band = exp(-d*d/(190.0*190.0)) * u_motionStrength;',
+'    px.x -= band * 26.0;',
+'    extraGlow += band * 0.85;',
+'  } else if (u_motionMode < 2.5) { if (u_motionMode > 1.5) {', // DECISION_REQUIRED: 焦点へ僅かに集合
+'    vec2 toF = u_focus - px;',
+'    float dist = length(toF) + 1.0;',
+'    float pull = u_motionStrength * 0.20 * exp(-dist/520.0);',
+'    px += toF * pull;',
+'    extraGlow += u_motionStrength * 0.35 * exp(-dist/300.0);',
+'  } } else if (u_motionMode < 3.5) {',                         // APPROVED: 柔らかい光の拡張
+'    float dist = length(px - u_focus);',
+'    float R = u_motionPhase * 620.0;',
+'    float ring = exp(-pow(dist - R, 2.0)/(150.0*150.0));',
+'    px += normalize(px - u_focus + vec2(0.001,0.0)) * ring * u_motionStrength * 10.0;',
+'    extraGlow += ring * u_motionStrength * 0.9;',
+'  } else if (u_motionMode < 4.5) {',                           // PROJECT_COMPLETED: 集合→静かに拡散
+'    float ph = u_motionPhase;',
+'    float pull = (ph < 0.5 ? smoothstep(0.0,0.5,ph) : (1.0 - smoothstep(0.5,1.0,ph))) * 0.5 * u_motionStrength;',
+'    px = mix(px, u_focus, pull);',
+'    vec2 dir = normalize(px - u_focus + vec2(0.001,0.0));',
+'    px += dir * sin(smoothstep(0.5,1.0,ph)*3.14159) * 70.0 * u_motionStrength;',
+'    extraGlow += pull * 0.5;',
+'  } else if (u_motionMode < 5.5) {',                           // COMMERCIAL_LOOP: 3点間の抽象的な粒子の流れ
+'    float sel = hash21(a_seed + 5.7);',
+'    if (sel < 0.22) {',
+'      float u = fract(a_t + u_time*0.06 + sel*4.0);',
+'      float su = u * 3.0;',
+'      float seg = floor(su);',
+'      float f = fract(su); f = f*f*(3.0-2.0*f);',
+'      vec2 p0 = seg < 0.5 ? u_nodeA : (seg < 1.5 ? u_nodeB : u_nodeC);',
+'      vec2 p1 = seg < 0.5 ? u_nodeB : (seg < 1.5 ? u_nodeC : u_nodeA);',
+'      vec2 lp = mix(p0, p1, f);',
+'      lp += (vec2(vnoise(a_seed*40.0 + u_time*0.1), vnoise(a_seed*40.0 + vec2(7.7,3.1) + u_time*0.1)) - 0.5) * 26.0;',
+'      px = mix(px, lp, u_motionStrength);',
+'      extraGlow += u_motionStrength * 0.55;',
+'    }',
+'  }',
+'',
+// ---- PHASE C: Morph（円環/菱形への集合。対象は粒子の約45%） ----
+'  if (u_morphBlend > 0.001) {',
+'    float msel = hash21(a_seed + 3.3);',
+'    if (msel < 0.45) {',
+'      float ang = a_t * 6.28318;',
+'      vec2 ringP = u_morphCenter + vec2(cos(ang), sin(ang)) * u_morphRadius * (0.86 + 0.28*a_rand);',
+'      float tt = a_t * 4.0;',
+'      float segd = floor(tt); float fd = fract(tt);',
+'      vec2 d0; vec2 d1;',
+'      if (segd < 0.5)      { d0 = vec2(0.0,-1.0); d1 = vec2(1.0,0.0); }',
+'      else if (segd < 1.5) { d0 = vec2(1.0,0.0);  d1 = vec2(0.0,1.0); }',
+'      else if (segd < 2.5) { d0 = vec2(0.0,1.0);  d1 = vec2(-1.0,0.0); }',
+'      else                 { d0 = vec2(-1.0,0.0); d1 = vec2(0.0,-1.0); }',
+'      vec2 diaP = u_morphCenter + mix(d0,d1,fd) * u_morphRadius * (0.9 + 0.2*a_rand);',
+'      vec2 tgt = mix(ringP, diaP, u_morphShape);',
+'      tgt += (vec2(vnoise(a_seed*30.0 + u_time*0.15), vnoise(a_seed*30.0 + vec2(3.3,8.8) + u_time*0.15)) - 0.5) * 9.0;',
+'      px = mix(px, tgt, u_morphBlend);',
+'      extraGlow += u_morphBlend * 0.35;',
+'    } else {',
+'      alphaMul *= (1.0 - u_morphBlend * 0.55);',   // 非対象粒子は静かに退く
+'    }',
+'  }',
+'',
+// ---- Cursor Interaction: Gentle Repel（半径150px・弱い反発） ----
+'  if (u_mouseStrength > 0.001) {',
+'    vec2 dm = px - u_mouse;',
+'    float dist = length(dm) + 0.001;',
+'    float rep = (1.0 - smoothstep(0.0, 150.0, dist)) * 26.0 * u_mouseStrength;',
+'    px += (dm / dist) * rep;',
+'  }',
+'',
+// ---- PHASE B: Click Ripple（最大4 / 0.5〜1.2秒で自然減衰） ----
+'  for (int i = 0; i < 4; i++) {',
+'    vec4 r = u_ripples[i];',
+'    if (r.w > 0.001) {',
+'      float age = u_time - r.z;',
+'      if (age >= 0.0 && age < 1.2) {',
+'        float R = age * 330.0;',
+'        vec2 dr = px - r.xy;',
+'        float dist = length(dr) + 0.001;',
+'        float wave = exp(-pow(dist - R, 2.0)/(65.0*65.0)) * exp(-age*2.6) * r.w;',
+'        px += (dr / dist) * wave * 14.0;',
+'        extraGlow += wave * 0.8;',
+'      }',
+'    }',
+'  }',
+'',
+// ---- UI背後の抑制: コンテンツ矩形内は opacity 1/3 ----
+'  float inX = smoothstep(u_contentRect.x - 40.0, u_contentRect.x + 40.0, px.x)',
+'            * (1.0 - smoothstep(u_contentRect.x + u_contentRect.z - 40.0, u_contentRect.x + u_contentRect.z + 40.0, px.x));',
+'  float inY = smoothstep(u_contentRect.y - 40.0, u_contentRect.y + 40.0, px.y)',
+'            * (1.0 - smoothstep(u_contentRect.y + u_contentRect.w - 40.0, u_contentRect.y + u_contentRect.w + 40.0, px.y));',
+'  float dim = 1.0 - inX * inY * 0.6667;',
+'',
+// ---- color / alpha（白 / Ice Blue / Pale Cyan, opacity 0.15〜0.35） ----
+'  float baseA = 0.15 + 0.20 * hash21(a_seed + 2.2);',
+'  v_alpha = clamp((baseA + extraGlow * 0.30) * dim * alphaMul, 0.0, 0.75);',
+'  float ch = hash21(a_seed + 9.1);',
+'  vec3 cWhite = vec3(0.86, 0.91, 0.94);',   // 白（地色よりごく僅かに沈む白）
+'  vec3 cIce   = vec3(0.749, 0.878, 0.933);',// Ice Blue #BFE0EE
+'  vec3 cCyan  = vec3(0.68, 0.85, 0.90);',   // Pale Cyan
+'  v_color = ch < 0.4 ? cWhite : (ch < 0.75 ? cIce : cCyan);',
+'',
+'  vec2 clip = (px / u_resolution) * 2.0 - 1.0;',
+'  clip.y = -clip.y;',
+'  gl_Position = vec4(clip, 0.0, 1.0);',
+'  gl_PointSize = (1.3 + 1.5 * hash21(a_seed + 4.4) + extraGlow * 1.6) * u_dpr;',
+'}'
+].join('\n');
+
+const AMBIENT_FS = [
+'precision mediump float;',
+'varying float v_alpha;',
+'varying vec3 v_color;',
+'void main(){',
+'  vec2 d = gl_PointCoord - vec2(0.5);',
+'  float m = 1.0 - smoothstep(0.12, 0.5, length(d));',
+'  if (m < 0.01) discard;',
+'  gl_FragColor = vec4(v_color, v_alpha * m);',
+'}'
+].join('\n');
+
+function compileProgram(gl, vsSrc, fsSrc) {
+  function sh(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      throw new Error('Shader compile error: ' + gl.getShaderInfoLog(s));
+    }
+    return s;
+  }
+  const p = gl.createProgram();
+  gl.attachShader(p, sh(gl.VERTEX_SHADER, vsSrc));
+  gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fsSrc));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    throw new Error('Program link error: ' + gl.getProgramInfoLog(p));
+  }
+  return p;
+}
+
+function createAmbientEngine(canvas) {
+  let gl = null;
+  try {
+    gl = canvas.getContext('webgl', { alpha: true, antialias: false, depth: false, premultipliedAlpha: false })
+      || canvas.getContext('experimental-webgl', { alpha: true, antialias: false, depth: false, premultipliedAlpha: false });
+  } catch (e) { gl = null; }
+  if (!gl) return null;
+
+  let prog;
+  try { prog = compileProgram(gl, AMBIENT_VS, AMBIENT_FS); }
+  catch (e) { return null; }
+  gl.useProgram(prog);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  // ---- 粒子バッファ（seed/t/rand のみ。位置はGPUで算出） ----
+  const area = window.innerWidth * window.innerHeight;
+  const maxCount = Math.max(500, Math.min(20000, Math.floor(area / 60)));
+  const data = new Float32Array(maxCount * 4);
+  for (let i = 0; i < maxCount; i++) {
+    data[i*4]   = Math.random();          // seed.x
+    data[i*4+1] = Math.random();          // seed.y
+    data[i*4+2] = i / maxCount;           // a_t（morph配置パラメータ）
+    data[i*4+3] = Math.random();          // a_rand
+  }
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  const locSeed = gl.getAttribLocation(prog, 'a_seed');
+  const locT = gl.getAttribLocation(prog, 'a_t');
+  const locRand = gl.getAttribLocation(prog, 'a_rand');
+  gl.enableVertexAttribArray(locSeed);
+  gl.vertexAttribPointer(locSeed, 2, gl.FLOAT, false, 16, 0);
+  gl.enableVertexAttribArray(locT);
+  gl.vertexAttribPointer(locT, 1, gl.FLOAT, false, 16, 8);
+  gl.enableVertexAttribArray(locRand);
+  gl.vertexAttribPointer(locRand, 1, gl.FLOAT, false, 16, 12);
+
+  const U = {};
+  ['u_time','u_resolution','u_dpr','u_mouse','u_mouseStrength','u_contentRect','u_detail',
+   'u_motionMode','u_motionStrength','u_motionPhase','u_focus','u_nodeA','u_nodeB','u_nodeC',
+   'u_morphBlend','u_morphShape','u_morphCenter','u_morphRadius','u_ripples[0]'
+  ].forEach(n => { U[n] = gl.getUniformLocation(prog, n); });
+
+  let cssW = 0, cssH = 0, curDpr = 1;
+  function resize(dpr) {
+    curDpr = dpr;
+    cssW = window.innerWidth; cssH = window.innerHeight;
+    canvas.width = Math.max(1, Math.floor(cssW * dpr));
+    canvas.height = Math.max(1, Math.floor(cssH * dpr));
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+
+  return {
+    maxCount,
+    resize,
+    get dpr() { return curDpr; },
+    render(t, s) {
+      // s: {count, detail, mouse[2], mouseStrength, contentRect[4],
+      //     motionMode, motionStrength, motionPhase, focus[2], nodeA, nodeB, nodeC,
+      //     morphBlend, morphShape, morphCenter[2], morphRadius, ripples(Float32Array 16)}
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.uniform1f(U['u_time'], t);
+      gl.uniform2f(U['u_resolution'], cssW, cssH);
+      gl.uniform1f(U['u_dpr'], curDpr);
+      gl.uniform2f(U['u_mouse'], s.mouse[0], s.mouse[1]);
+      gl.uniform1f(U['u_mouseStrength'], s.mouseStrength);
+      gl.uniform4f(U['u_contentRect'], s.contentRect[0], s.contentRect[1], s.contentRect[2], s.contentRect[3]);
+      gl.uniform1f(U['u_detail'], s.detail);
+      gl.uniform1f(U['u_motionMode'], s.motionMode);
+      gl.uniform1f(U['u_motionStrength'], s.motionStrength);
+      gl.uniform1f(U['u_motionPhase'], s.motionPhase);
+      gl.uniform2f(U['u_focus'], s.focus[0], s.focus[1]);
+      gl.uniform2f(U['u_nodeA'], s.nodeA[0], s.nodeA[1]);
+      gl.uniform2f(U['u_nodeB'], s.nodeB[0], s.nodeB[1]);
+      gl.uniform2f(U['u_nodeC'], s.nodeC[0], s.nodeC[1]);
+      gl.uniform1f(U['u_morphBlend'], s.morphBlend);
+      gl.uniform1f(U['u_morphShape'], s.morphShape);
+      gl.uniform2f(U['u_morphCenter'], s.morphCenter[0], s.morphCenter[1]);
+      gl.uniform1f(U['u_morphRadius'], s.morphRadius);
+      gl.uniform4fv(U['u_ripples[0]'], s.ripples);
+      gl.drawArrays(gl.POINTS, 0, Math.min(s.count, maxCount));
+    }
+  };
+}
+
+/* =========================================================================
+ * PHASE B : Ripple Controller（Primary Actionのみ / uniform配列 最大4）
+ * ========================================================================= */
+const Ripples = (() => {
+  const arr = new Float32Array(16); // 4 x (x, y, startTime, strength)
+  let idx = 0;
+  return {
+    data: arr,
+    add(x, y, tNow) {
+      if (!fx('clickRipple')) return;
+      const strength = reducedMotion ? 0.18 : 1.0; // Reduced Motion時は透明度の一瞬の変化程度
+      arr[idx*4] = x; arr[idx*4+1] = y; arr[idx*4+2] = tNow; arr[idx*4+3] = strength;
+      idx = (idx + 1) % 4;
+      ensureLoop();
+    },
+    prune(tNow) {
+      for (let i = 0; i < 4; i++) {
+        if (arr[i*4+3] > 0 && tNow - arr[i*4+2] > 1.2) arr[i*4+3] = 0;
+      }
+    },
+    active(tNow) {
+      for (let i = 0; i < 4; i++) if (arr[i*4+3] > 0 && tNow - arr[i*4+2] < 1.2) return true;
+      return false;
+    }
+  };
+})();
+
+/* =========================================================================
+ * PHASE B : Meaningful Motion Controller
+ *   抽象State名 → mode番号のみをEngineへ渡す。Text/Chipは呼び出し側で更新。
+ * ========================================================================= */
+const MOTION_DEFS = {
+  FACTORY_RESPONSE_RECEIVED: { mode: 1, duration: 6,  chip: ['回答受信', ''],      msg: '工場からの回答を受信しました — 右から左へ静かな光が流れます' },
+  DECISION_REQUIRED:         { mode: 2, duration: 6,  chip: ['要対応', 'amber'],   msg: '判断が必要です — Decision領域へ粒子が僅かに集まります' },
+  APPROVED:                  { mode: 3, duration: 3.5,chip: ['承認済み', 'green'], msg: '承認されました — 小さな波紋と柔らかい光が広がります' },
+  PROJECT_COMPLETED:         { mode: 4, duration: 8,  chip: ['完了', 'green'],     msg: 'プロジェクトが完了しました — 粒子が一度集まり、静かに拡散します' },
+  COMMERCIAL_LOOP:           { mode: 5, duration: 10, chip: ['稼働中', ''],        msg: 'Customer ↔ Crossimage ↔ Factory の循環を抽象的な粒子の流れで表現しています' }
+};
+const Motion = (() => {
+  let mode = 0, start = 0, duration = 0, focusEl = null;
+  return {
+    trigger(name, focusElement) {
+      const def = MOTION_DEFS[name];
+      if (!def) return;
+      mode = def.mode; duration = def.duration; start = performance.now() / 1000;
+      focusEl = focusElement || null;
+      ensureLoop();
+    },
+    // 毎フレーム: 現在のuniform値を返す（10秒以内に自然終了しIdleへ）
+    sample(tNow) {
+      if (!mode) return { mode: 0, strength: 0, phase: 0, focus: [0, 0] };
+      const el = tNow - start;
+      if (el >= duration) { mode = 0; onMotionEnded(); return { mode: 0, strength: 0, phase: 0, focus: [0, 0] }; }
+      const p = el / duration;
+      const strength = smooth01(Math.min(p / 0.12, 1)) * (1 - smooth01(Math.max((p - 0.82) / 0.18, 0)));
+      let focus = [window.innerWidth / 2, window.innerHeight / 2];
+      if (focusEl) {
+        const r = focusEl.getBoundingClientRect();
+        focus = [r.left + r.width / 2, r.top + r.height / 2];
+      }
+      return { mode, strength: reducedMotion ? strength * 0.4 : strength, phase: p, focus };
+    },
+    get active() { return mode !== 0; }
+  };
+})();
+function smooth01(x) { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); }
+
+/* =========================================================================
+ * PHASE C : Morph Controller（Free Flow → 集合 → Hold → Dissolve）
+ * ========================================================================= */
+const Morph = (() => {
+  let phase = 'idle'; // idle | gather | hold | dissolve
+  let phaseStart = 0, blend = 0;
+  let shape = 0; // 0=ring 1=diamond
+  const GATHER = 2.2, HOLD = 2.5, DISSOLVE = 2.2;
+  function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+  return {
+    setShape(s) { shape = s === 'diamond' ? 1 : 0; },
+    get shape() { return shape; },
+    start() {
+      if (phase !== 'idle') return;
+      phase = 'gather'; phaseStart = performance.now() / 1000;
+      setMorphChip('Gathering');
+      ensureLoop();
+    },
+    sample(tNow) {
+      if (phase === 'idle') return blend;
+      const el = tNow - phaseStart;
+      if (phase === 'gather') {
+        blend = easeInOut(Math.min(el / GATHER, 1));
+        if (el >= GATHER) { phase = 'hold'; phaseStart = tNow; setMorphChip('Hold'); }
+      } else if (phase === 'hold') {
+        blend = 1;
+        if (el >= HOLD) { phase = 'dissolve'; phaseStart = tNow; setMorphChip('Dissolve'); }
+      } else if (phase === 'dissolve') {
+        blend = 1 - easeInOut(Math.min(el / DISSOLVE, 1));
+        if (el >= DISSOLVE) { phase = 'idle'; blend = 0; setMorphChip('Free Flow'); }
+      }
+      return blend;
+    },
+    get active() { return phase !== 'idle'; },
+    reset() { phase = 'idle'; blend = 0; setMorphChip('Free Flow'); }
+  };
+})();
+
+/* =========================================================================
+ * PHASE C : Liquid Orb Engine（別canvas・別プログラム / SDF + fbm）
+ * ========================================================================= */
+const ORB_VS = [
+'attribute vec2 a_pos;',
+'void main(){ gl_Position = vec4(a_pos, 0.0, 1.0); }'
+].join('\n');
+const ORB_FS = [
+'precision mediump float;',
+'uniform vec2 u_res;',
+'uniform float u_time;',
+'uniform vec3 u_tint;',
+'uniform float u_pulseAmp;',
+'uniform float u_pulseSpeed;',
+'float hash21(vec2 p){ p = fract(p*vec2(123.34,345.45)); p += dot(p, p+34.345); return fract(p.x*p.y); }',
+'float vnoise(vec2 p){',
+'  vec2 i = floor(p); vec2 f = fract(p);',
+'  f = f*f*(3.0-2.0*f);',
+'  return mix(mix(hash21(i), hash21(i+vec2(1.0,0.0)), f.x),',
+'             mix(hash21(i+vec2(0.0,1.0)), hash21(i+vec2(1.0,1.0)), f.x), f.y);',
+'}',
+'float fbm(vec2 p){',
+'  float v = 0.0; float a = 0.5;',
+'  for (int i = 0; i < 4; i++) { v += a * vnoise(p); p *= 2.03; a *= 0.5; }',
+'  return v;',
+'}',
+'void main(){',
+'  vec2 uv = (gl_FragCoord.xy - 0.5*u_res) / min(u_res.x, u_res.y);',
+'  uv.y = -uv.y;',
+'  float ang = atan(uv.y, uv.x);',
+'  float pulse = 1.0 + sin(u_time * u_pulseSpeed) * u_pulseAmp;',
+'  float wob = (fbm(vec2(cos(ang), sin(ang)) * 1.3 + u_time * 0.08) - 0.5) * 0.05;',
+'  float r = 0.34 * pulse + wob;',
+'  float d = length(uv) - r;',
+'  float body = 1.0 - smoothstep(-0.05, 0.015, d);',
+'  float edge = 1.0 - smoothstep(0.0, 0.014, abs(d));',
+'  vec3 bg = vec3(0.996, 0.997, 1.0);',
+'  vec3 col = bg;',
+// 内部: 透明感（薄いtint + 内側ほど僅かに濃く）
+'  float inner = 1.0 - smoothstep(-0.34, 0.0, d);',
+'  col = mix(col, mix(vec3(1.0), u_tint, 0.30), body * 0.5);',
+'  col = mix(col, mix(vec3(1.0), u_tint, 0.55), inner * 0.35);',
+// 内部のゆらぎ（水のような濃度ムラ）
+'  float flow = fbm(uv * 2.6 + vec2(0.0, u_time * 0.06));',
+'  col = mix(col, mix(vec3(1.0), u_tint, 0.65), body * flow * 0.22);',
+// ハイライト
+'  float hl = 1.0 - smoothstep(0.0, 0.30, length(uv - vec2(-0.13, -0.15)));',
+'  col = mix(col, vec3(1.0), hl * body * 0.55);',
+// 下部の深み（uv.yは下向き正）
+'  float dp = smoothstep(0.0, 0.34, uv.y);',
+'  col = mix(col, u_tint * 0.82 + vec3(0.16), body * dp * 0.28);',
+// 輪郭
+'  col = mix(col, u_tint * 0.55 + vec3(0.35), edge * 0.5);',
+'  gl_FragColor = vec4(col, 1.0);',
+'}'
+].join('\n');
+
+const ORB_STATES = {
+  NORMAL:            { tint: [0.75, 0.88, 0.93], amp: 0.010, speed: 0.8 },
+  PROCESSING:        { tint: [0.50, 0.72, 0.85], amp: 0.020, speed: 2.2 },
+  RESPONSE_RECEIVED: { tint: [0.55, 0.80, 0.78], amp: 0.014, speed: 1.4 },
+  DECISION_REQUIRED: { tint: [0.88, 0.80, 0.58], amp: 0.017, speed: 1.8 },
+  COMPLETED:         { tint: [0.62, 0.84, 0.70], amp: 0.006, speed: 0.5 }
+};
+function createOrbEngine(canvas) {
+  let gl = null;
+  try { gl = canvas.getContext('webgl', { alpha: false, antialias: true }); } catch (e) { gl = null; }
+  if (!gl) return null;
+  let prog;
+  try { prog = compileProgram(gl, ORB_VS, ORB_FS); } catch (e) { return null; }
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  const locPos = gl.getAttribLocation(prog, 'a_pos');
+  gl.enableVertexAttribArray(locPos);
+  gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, 0, 0);
+  const U = {
+    res: gl.getUniformLocation(prog, 'u_res'),
+    time: gl.getUniformLocation(prog, 'u_time'),
+    tint: gl.getUniformLocation(prog, 'u_tint'),
+    amp: gl.getUniformLocation(prog, 'u_pulseAmp'),
+    speed: gl.getUniformLocation(prog, 'u_pulseSpeed')
+  };
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = 240 * dpr; canvas.height = 240 * dpr;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  let state = ORB_STATES.NORMAL;
+  return {
+    setState(name) { state = ORB_STATES[name] || ORB_STATES.NORMAL; },
+    render(t) {
+      gl.uniform2f(U.res, canvas.width, canvas.height);
+      gl.uniform1f(U.time, t);
+      gl.uniform3f(U.tint, state.tint[0], state.tint[1], state.tint[2]);
+      gl.uniform1f(U.amp, reducedMotion ? state.amp * 0.1 : state.amp);
+      gl.uniform1f(U.speed, state.speed);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+  };
+}
+
+/* =========================================================================
+ * PHASE C : Audio Engine（WebAudio合成のみ / gain 0.05以下 / Default OFF）
+ *   AudioContextはユーザー操作後に生成する。
+ * ========================================================================= */
+const AudioEngine = (() => {
+  let ctx = null;
+  function ensure() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  function drop(freqStart, freqEnd, dur, peak) {
+    const c = ensure(); if (!c) return;
+    const t0 = c.currentTime + 0.01;
+    const osc = c.createOscillator();
+    const g = c.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freqStart, t0);
+    osc.frequency.exponentialRampToValueAtTime(freqEnd, t0 + dur * 0.85);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g).connect(c.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.05);
+  }
+  function glass() {
+    const c = ensure(); if (!c) return;
+    const t0 = c.currentTime + 0.05;
+    [1568, 2349, 3136].forEach((f, i) => {
+      const osc = c.createOscillator();
+      const g = c.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f * (1 + (i - 1) * 0.0015), t0);
+      const peak = 0.010 / (i + 1);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(peak, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.3);
+      osc.connect(g).connect(c.destination);
+      osc.start(t0); osc.stop(t0 + 1.4);
+    });
+  }
+  return {
+    primary() { if (fx('sound')) drop(1400, 720, 0.18, 0.035); },        // 小さな水滴
+    decision() { if (fx('sound')) drop(760, 320, 0.32, 0.045); },        // やや深い水滴
+    success() { if (fx('sound')) { drop(1100, 520, 0.25, 0.04); glass(); } } // 水滴+弱いガラス共鳴
+  };
+})();
+
+/* =========================================================================
+ * 横断 : Main Loop（単一rAF / 全EffectOFFなら完全停止でCPU/GPU解放）
+ * ========================================================================= */
+const bgCanvas = document.getElementById('bg-canvas');
+const orbCanvas = document.getElementById('orb-canvas');
+const container = document.getElementById('main-column');
+const debugEl = document.getElementById('debug');
+
+const ambient = createAmbientEngine(bgCanvas);
+if (!ambient) {
+  webglOK = false;
+  document.body.classList.add('no-webgl');
+  document.getElementById('notice-nowebgl').classList.add('show');
+}
+const orb = createOrbEngine(orbCanvas);
+if (!orb) orbGLOK = false;
+
+const mouse = { x: -9999, y: -9999, lx: -9999, ly: -9999 };
+window.addEventListener('pointermove', (e) => {
+  mouse.x = e.clientX; mouse.y = e.clientY;
+}, { passive: true });
+
+let contentRect = [0, 0, 0, 0];
+function updateContentRect() {
+  const r = container.getBoundingClientRect();
+  contentRect = [r.left, 0, r.width, window.innerHeight];
+}
+
+let appliedTier = '';
+function applyQuality() {
+  const tier = Governor.tier;
+  if (tier === appliedTier || !ambient) return;
+  appliedTier = tier;
+  const q = QUALITY_TIERS[tier] || QUALITY_TIERS.high;
+  ambient.resize(q.dpr);
+  updateContentRect();
+  document.getElementById('quality-current').textContent =
+    Flags.get('quality') === 'auto' ? ('auto — ' + tier) : tier;
+}
+
+let rafId = null;
+let lastNow = 0;
+
+function anyRenderActive() {
+  return fx('ambientParticles') || fx('liquidOrb');
+}
+
+function frame(nowMs) {
+  rafId = null;
+  if (!anyRenderActive() || document.hidden) { updateDebug(); return; }
+  const t = nowMs / 1000;
+  const dt = lastNow ? (t - lastNow) : 0.016;
+  lastNow = t;
+
+  if (Governor.frame(nowMs, dt)) applyQuality();
+
+  if (fx('ambientParticles') && ambient) {
+    // cursor lerp（0.05の遅延追従 / 即応禁止）
+    if (mouse.lx < -9000) { mouse.lx = mouse.x; mouse.ly = mouse.y; }
+    mouse.lx += (mouse.x - mouse.lx) * 0.05;
+    mouse.ly += (mouse.y - mouse.ly) * 0.05;
+
+    const q = QUALITY_TIERS[Governor.tier] || QUALITY_TIERS.high;
+    let count = Math.floor(ambient.maxCount * q.mult);
+    if (reducedMotion) count = Math.floor(count / 4);
+
+    const m = fx('meaningfulMotion') ? Motion.sample(t) : { mode: 0, strength: 0, phase: 0, focus: [0, 0] };
+    Ripples.prune(t);
+
+    let morphBlend = 0;
+    let morphCenter = [window.innerWidth / 2, window.innerHeight / 2];
+    if (fx('particleMorph')) {
+      morphBlend = Morph.sample(t);
+      const ms = document.getElementById('morph-stage').getBoundingClientRect();
+      morphCenter = [ms.left + ms.width / 2, ms.top + ms.height / 2];
+    }
+
+    // COMMERCIAL_LOOP の3点座標（画面内のラベル付きの点から取得）
+    let nA = [0, 0], nB = [0, 0], nC = [0, 0];
+    if (m.mode === 5) {
+      nA = nodeCenter('node-customer');
+      nB = nodeCenter('node-crossimage');
+      nC = nodeCenter('node-factory');
+    }
+
+    ambient.render(t, {
+      count,
+      detail: q.detail,
+      mouse: [mouse.lx, mouse.ly],
+      mouseStrength: fx('cursorInteraction') ? 1 : 0,
+      contentRect,
+      motionMode: m.mode,
+      motionStrength: m.strength,
+      motionPhase: m.phase,
+      focus: m.focus,
+      nodeA: nA, nodeB: nB, nodeC: nC,
+      morphBlend,
+      morphShape: Morph.shape,
+      morphCenter,
+      morphRadius: 95,
+      ripples: Ripples.data
+    });
+    debugParticleCount = count;
+  }
+
+  if (fx('liquidOrb') && orb) orb.render(t);
+
+  updateDebug();
+  rafId = requestAnimationFrame(frame);
+}
+
+function ensureLoop() {
+  if (rafId === null && anyRenderActive() && !document.hidden) {
+    lastNow = 0;
+    rafId = requestAnimationFrame(frame);
+  }
+}
+function nodeCenter(id) {
+  const r = document.getElementById(id).getBoundingClientRect();
+  return [r.left + r.width / 2, r.top + r.height / 2];
+}
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureLoop(); });
+window.addEventListener('resize', () => {
+  if (ambient) {
+    const q = QUALITY_TIERS[Governor.tier] || QUALITY_TIERS.high;
+    ambient.resize(q.dpr);
+  }
+  updateContentRect();
+  ensureLoop();
+});
+window.addEventListener('scroll', () => { /* rect類はframe内で取得 */ }, { passive: true });
+
+/* ---- debug表示 ---- */
+let debugParticleCount = 0;
+let debugLastText = '';
+function updateDebug() {
+  if (!Flags.get('showDebug')) { debugEl.classList.remove('show'); return; }
+  debugEl.classList.add('show');
+  const txt = 'FPS ' + Governor.fps.toFixed(0)
+    + ' / 粒子 ' + (fx('ambientParticles') ? debugParticleCount.toLocaleString() : 'OFF')
+    + ' / Quality ' + (Flags.get('quality') === 'auto' ? 'auto:' + Governor.tier : Flags.get('quality'));
+  if (txt !== debugLastText) { debugEl.textContent = txt; debugLastText = txt; }
+}
+
+/* =========================================================================
+ * UI配線（Business UI — Effectが全てOFFでも完全に機能する）
+ * ========================================================================= */
+
+/* ---- Feature Flag Drawer ---- */
+const drawer = document.getElementById('flag-drawer');
+const gearBtn = document.getElementById('gear-btn');
+gearBtn.addEventListener('click', () => {
+  const open = drawer.classList.toggle('open');
+  gearBtn.setAttribute('aria-expanded', String(open));
+  if (open) drawer.querySelector('.drawer-close').focus();
+});
+document.getElementById('drawer-close').addEventListener('click', () => {
+  drawer.classList.remove('open');
+  gearBtn.setAttribute('aria-expanded', 'false');
+  gearBtn.focus();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && drawer.classList.contains('open')) {
+    drawer.classList.remove('open');
+    gearBtn.setAttribute('aria-expanded', 'false');
+    gearBtn.focus();
+  }
+});
+
+function syncSwitch(btn, val) { btn.setAttribute('aria-checked', String(!!val)); }
+document.querySelectorAll('.drawer [data-flag]').forEach(btn => {
+  const key = btn.getAttribute('data-flag');
+  syncSwitch(btn, Flags.get(key));
+  btn.addEventListener('click', () => {
+    Flags.set(key, !Flags.get(key));
+    syncSwitch(btn, Flags.get(key));
+  });
+});
+const masterBtn = document.getElementById('flag-masterOff');
+syncSwitch(masterBtn, Flags.get('masterOff'));
+masterBtn.addEventListener('click', () => {
+  Flags.set('masterOff', !Flags.get('masterOff'));
+  syncSwitch(masterBtn, Flags.get('masterOff'));
+});
+document.querySelectorAll('[data-quality]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    Flags.set('quality', btn.getAttribute('data-quality'));
+    document.querySelectorAll('[data-quality]').forEach(b =>
+      b.setAttribute('aria-pressed', String(b === btn)));
+    appliedTier = ''; applyQuality();
+  });
+  btn.setAttribute('aria-pressed', String(btn.getAttribute('data-quality') === Flags.get('quality')));
+});
+
+function applyFlagVisibility() {
+  const bgOn = fx('ambientParticles');
+  bgCanvas.style.display = bgOn ? 'block' : 'none';
+  const orbOn = fx('liquidOrb');
+  document.body.classList.toggle('orb-off', !orbOn);
+  const soundOn = Flags.get('sound') && !Flags.get('masterOff');
+  syncSwitch(document.getElementById('sound-toggle'), soundOn);
+  document.getElementById('sound-note').textContent = soundOn
+    ? '音量は極小に設定されています（gain 0.05以下）。'
+    : 'Soundは現在OFFです。トグルをONにすると試聴できます。';
+  updateDebug();
+  ensureLoop();
+}
+Flags.onChange(applyFlagVisibility);
+
+/* ---- Decision Card ---- */
+function eventPoint(e, el) {
+  // キーボード操作（Enter/Space）ではclientX/Yが0になるため要素中心へフォールバック
+  if (e && (e.clientX || e.clientY)) return [e.clientX, e.clientY];
+  const r = el.getBoundingClientRect();
+  return [r.left + r.width / 2, r.top + r.height / 2];
+}
+let selectedOption = null;
+const approveBtn = document.getElementById('approve-btn');
+document.querySelectorAll('.js-option').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    selectedOption = btn.getAttribute('data-option');
+    document.querySelectorAll('.js-option').forEach(b =>
+      b.setAttribute('aria-pressed', String(b === btn)));
+    approveBtn.disabled = false;
+    document.getElementById('dc-status').textContent = 'Option ' + selectedOption + ' を選択中';
+    document.getElementById('dc-approved-msg').classList.remove('show');
+    // Primary Action: Ripple + 小さな水滴
+    const pt = eventPoint(e, btn);
+    Ripples.add(pt[0], pt[1], performance.now() / 1000);
+    AudioEngine.primary();
+  });
+});
+approveBtn.addEventListener('click', (e) => {
+  if (!selectedOption) return;
+  const chip = document.getElementById('dc-status');
+  chip.textContent = '承認済み（Option ' + selectedOption + '）';
+  chip.className = 'chip green';
+  document.getElementById('dc-approved-msg').classList.add('show');
+  // Primary Action: Ripple + APPROVED演出 + Decision確定音/Success音
+  const pt = eventPoint(e, approveBtn);
+  Ripples.add(pt[0], pt[1], performance.now() / 1000);
+  if (fx('meaningfulMotion')) Motion.trigger('APPROVED', document.getElementById('decision-card'));
+  AudioEngine.decision();
+  AudioEngine.success();
+});
+
+/* ---- Meaningful Motion Demo（Text/Chipは常に更新。粒子はFlag ONのときのみ） ---- */
+const motionChip = document.getElementById('motion-chip');
+const motionMsg = document.getElementById('motion-msg');
+function onMotionEnded() {
+  motionChip.textContent = 'Idle';
+  motionChip.className = 'chip idle';
+  motionMsg.textContent = '待機中 — 演出は終了しました';
+}
+document.querySelectorAll('.js-motion').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const name = btn.getAttribute('data-motion');
+    const def = MOTION_DEFS[name];
+    motionChip.textContent = def.chip[0];
+    motionChip.className = 'chip ' + (def.chip[1] || '');
+    motionMsg.textContent = def.msg + (fx('meaningfulMotion') ? '' : '（粒子演出はOFF — テキストのみ更新）');
+    if (fx('meaningfulMotion')) {
+      const focusEl = (name === 'DECISION_REQUIRED' || name === 'APPROVED')
+        ? document.getElementById('decision-card')
+        : document.getElementById('loop-stage');
+      Motion.trigger(name, focusEl);
+    } else {
+      // 粒子OFFでもUIとして成立: 数秒後にIdleへ戻す
+      setTimeout(onMotionEnded, (def.duration) * 1000);
+    }
+    if (name === 'APPROVED') AudioEngine.success();
+  });
+});
+
+/* ---- Morph Demo ---- */
+const morphChip = document.getElementById('morph-chip');
+function setMorphChip(label) {
+  morphChip.textContent = label;
+  morphChip.className = 'chip ' + (label === 'Free Flow' ? 'idle' : '');
+}
+document.getElementById('morph-start').addEventListener('click', () => {
+  if (!fx('particleMorph')) {
+    setMorphChip('Free Flow');
+    morphChip.textContent = reducedMotion ? 'Reduced Motionのため停止中' : 'Morphは現在OFF';
+    return;
+  }
+  Morph.start();
+});
+document.querySelectorAll('[data-shape]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    Morph.setShape(btn.getAttribute('data-shape'));
+    document.querySelectorAll('[data-shape]').forEach(b =>
+      b.setAttribute('aria-pressed', String(b === btn)));
+  });
+});
+
+/* ---- Orb Demo ---- */
+document.querySelectorAll('.js-orb').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const name = btn.getAttribute('data-orb');
+    if (orb) orb.setState(name);
+    document.getElementById('orb-state-text').textContent = name; // テキストState表示を必ず併置
+    document.querySelectorAll('.js-orb').forEach(b =>
+      b.setAttribute('aria-pressed', String(b === btn)));
+    ensureLoop();
+  });
+});
+
+/* ---- Sound Demo ---- */
+document.getElementById('sound-toggle').addEventListener('click', () => {
+  Flags.set('sound', !Flags.get('sound'));
+  const swEl = document.querySelector('.drawer [data-flag="sound"]');
+  if (swEl) syncSwitch(swEl, Flags.get('sound'));
+});
+document.querySelectorAll('.js-sound').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const kind = btn.getAttribute('data-sound');
+    if (!fx('sound')) {
+      document.getElementById('sound-note').textContent = 'Soundは現在OFFです。トグルをONにしてから試聴してください。';
+      return;
+    }
+    if (kind === 'primary') AudioEngine.primary();
+    else if (kind === 'decision') AudioEngine.decision();
+    else AudioEngine.success();
+  });
+});
+
+/* ---- 初期化 ---- */
+if (reducedMotion) document.getElementById('notice-reduced').classList.add('show');
+updateContentRect();
+applyQuality();
+applyFlagVisibility();
+ensureLoop();
+</script>
+</body>
+</html>
