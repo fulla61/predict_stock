@@ -1,0 +1,9 @@
+.git
+**/node_modules
+app/server/data
+app/web/dist
+docs
+poc
+prototype
+*.md
+!app/**/*.md

@@ -16,6 +16,7 @@ import { loopsRouter } from './routes/loops.js';
 
 const app = express();
 app.disable('x-powered-by');
+if (config.isProduction) app.set('trust proxy', 1);
 app.use(express.json({ limit: '256kb' }));
 app.use(cookieParser());
 app.use(attachUser);
@@ -55,6 +56,10 @@ app.use(
       .json({ error: { code: 'INTERNAL', message: 'サーバー内部でエラーが発生しました' } });
   }
 );
+
+// 初期データ投入（冪等: 既存データがあれば何もしない）→ 起動
+const { runSeed } = await import('./seed.js');
+await runSeed();
 
 app.listen(config.port, () => {
   console.log(

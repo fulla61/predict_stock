@@ -21,13 +21,19 @@ function loadDotEnv(): void {
 }
 loadDotEnv();
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 export const config = {
   port: Number(process.env.PORT || 8787),
+  isProduction,
+  // 本番はTLS終端がプロキシ（Render等）にあるため secure cookie + trust proxy
+  cookieSecure: isProduction,
   sessionSecret: process.env.SESSION_SECRET || 'dev-secret',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
   autoApproveProposals: (process.env.AUTO_APPROVE_PROPOSALS || 'false') === 'true',
   seedStaffPw: process.env.SEED_STAFF_PW || 'changeme-staff',
   seedClientPw: process.env.SEED_CLIENT_PW || 'changeme-client',
-  dbPath: path.join(SERVER_ROOT, 'data', 'app.db'),
+  // 本番は永続ディスク（例: /data）を DATA_DIR で指定。未指定なら従来どおり server/data
+  dbPath: path.join(process.env.DATA_DIR || path.join(SERVER_ROOT, 'data'), 'app.db'),
   webDist: path.resolve(SERVER_ROOT, '..', 'web', 'dist'),
 };

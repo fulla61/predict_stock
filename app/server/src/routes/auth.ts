@@ -5,6 +5,7 @@ import { createSession, deleteSession, findUserByEmail } from '../repo/users.js'
 import { audit } from '../repo/audit.js';
 import { rateLimit } from '../middleware/ratelimit.js';
 import { requireAuth, SESSION_COOKIE } from '../middleware/auth.js';
+import { config } from '../config.js';
 import type { LoginResponse, MeResponse } from '../../../shared/api-types.js';
 
 export const authRouter = Router();
@@ -30,6 +31,7 @@ authRouter.post('/auth/login', rateLimit('login'), async (req, res) => {
   res.cookie(SESSION_COOKIE, session.token, {
     httpOnly: true,
     sameSite: 'lax',
+    secure: config.cookieSecure,
     maxAge: 24 * 3600 * 1000,
   });
   const body: LoginResponse = {

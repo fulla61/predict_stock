@@ -3,8 +3,9 @@ import { db } from './db/db.js';
 import { config } from './config.js';
 import { nextClientPublicId, nextFactoryPublicId } from './repo/ids.js';
 
-// STAFF 1名 + デモCLIENT 1社1名（既存ならスキップ）
-async function seed(): Promise<void> {
+// STAFF 1名 + デモCLIENT 1社1名（既存ならスキップ）。
+// 冪等なので本番では起動時に毎回呼ばれる（index.tsから）。
+export async function runSeed(): Promise<void> {
   const staffEmail = 'admin@crossimage.jp';
   const clientEmail = 'demo@example.co.jp';
 
@@ -83,7 +84,10 @@ async function seed(): Promise<void> {
   console.log('[seed] done');
 }
 
-seed().catch((e) => {
-  console.error('[seed] failed:', e);
-  process.exit(1);
-});
+// CLI 実行時（npm run seed）のみ即時実行
+if (process.argv[1] && process.argv[1].endsWith('seed.ts')) {
+  runSeed().catch((e) => {
+    console.error('[seed] failed:', e);
+    process.exit(1);
+  });
+}

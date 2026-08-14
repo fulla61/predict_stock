@@ -1,0 +1,29 @@
+# Render Blueprint — リポジトリを選ぶだけで本番環境が自動構築される定義ファイル
+# 手順は DEPLOY.md を参照
+services:
+  - type: web
+    name: crossimage-product-os
+    runtime: docker
+    plan: starter # 永続ディスク（SQLite保存）に有料プランが必要。約$7/月
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true # main へのプッシュで自動再デプロイ
+    disk:
+      name: crossimage-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /data
+      - key: AUTO_APPROVE_PROPOSALS
+        value: "false"
+      - key: SESSION_SECRET
+        generateValue: true # Render が安全な乱数を自動生成
+      - key: SEED_STAFF_PW
+        generateValue: true # 初期の社内ログインパスワード（Render管理画面のEnvironmentで確認）
+      - key: SEED_CLIENT_PW
+        generateValue: true # デモ顧客のパスワード（同上）
+      - key: ANTHROPIC_API_KEY
+        sync: false # 空のままでもOK（デモAIで動作）。本物のAIにする時に管理画面で設定
