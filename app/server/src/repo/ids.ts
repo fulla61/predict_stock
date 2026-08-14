@@ -1,0 +1,31 @@
+import { db } from '../db/db.js';
+
+// 採番はトランザクション内で単調増加のみ（再利用・欠番詰め直し禁止）
+const bump = db.transaction((scopeType: string, scopeId: string, typeCode: string): number => {
+  db.prepare(
+    `INSERT INTO id_sequences (scope_type, scope_id, type_code, last_no)
+     VALUES (?, ?, ?, 0)
+     ON CONFLICT(scope_type, scope_id, type_code) DO NOTHING`
+  ).run(scopeType, scopeId, typeCode);
+  db.prepare(
+    `UPDATE id_sequences SET last_no = last_no + 1
+     WHERE scope_type = ? AND scope_id = ? AND type_code = ?`
+  ).run(scopeType, scopeId, typeCode);
+  const row = db
+    .prepare(
+      `SELECT last_no FROM id_sequences WHERE scope_type = ? AND scope_id = ? AND type_code = ?`
+    )
+    .get(scopeType, scopeId, typeCode) as { last_no: number };
+  return row.last_no;
+});
+
+export function nextProjectPublicId(): string {
+  const year = new Date().getFullYear();
+  const n = bump('YEAR', String(year), 'CI');
+  return `CI-${year}-${String(n).padStart(4, '0')}`;
+}
+
+export function nextClientPublicId(): string {
+  const n = bump('GLOBAL', 'GLOBAL', 'CL');
+  return `CL-${String(n).padStart(4, '0')}`;
+}
