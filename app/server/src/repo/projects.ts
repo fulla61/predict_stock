@@ -12,6 +12,7 @@ export interface ProjectRow {
   status: string;
   entry_route: 'IDEA' | 'PRODUCT' | 'SPEC' | 'REPEAT';
   ref_url: string | null;
+  hide_initial_prices: number; // BI-3: 1なら顧客レスポンスから価格レンジを除外
   created_at: string;
 }
 
@@ -184,6 +185,13 @@ export function getProjectDna(projectId: number): { axes_json: string; ai_ration
     .get(projectId) as never;
 }
 
+export function listProjectAttributeCodes(projectId: number): string[] {
+  const rows = db
+    .prepare(`SELECT attribute_code FROM project_attributes WHERE project_id = ? ORDER BY id`)
+    .all(projectId) as { attribute_code: string }[];
+  return rows.map((r) => r.attribute_code);
+}
+
 export function upsertProjectAttributes(projectId: number, codes: string[]): void {
   const stmt = db.prepare(
     `INSERT INTO project_attributes (project_id, attribute_code, status)
@@ -198,4 +206,11 @@ export function updateProjectStatus(projectId: number, status: string): void {
     status,
     projectId
   );
+}
+
+// BI-3: 金額非表示モード（案件単位）
+export function setProjectHideInitialPrices(projectId: number, hide: boolean): void {
+  db.prepare(
+    `UPDATE projects SET hide_initial_prices = ?, updated_at = datetime('now') WHERE id = ?`
+  ).run(hide ? 1 : 0, projectId);
 }

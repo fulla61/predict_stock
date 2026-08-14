@@ -156,3 +156,33 @@ export function updateClientSettings(clientId: number, settings: ClientSettingsS
     clientId
   );
 }
+
+// ============================================================
+// BI-3: お客様アカウント発行（client + CLIENT user を同時作成）
+// ============================================================
+
+// メール重複チェック（無効化ユーザー含む。usersテーブルはUNIQUE(email)）
+export function emailExists(email: string): boolean {
+  return db.prepare(`SELECT id FROM users WHERE email = ?`).get(email) !== undefined;
+}
+
+export const createClientWithUserTx = db.transaction(
+  (params: {
+    publicId: string;
+    companyName: string;
+    contactName: string;
+    email: string;
+    passwordHash: string;
+  }): { clientId: number; userId: number } => {
+    const c = db
+      .prepare(`INSERT INTO clients (public_id, name) VALUES (?, ?)`)
+      .run(params.publicId, params.companyName);
+    const clientId = Number(c.lastInsertRowid);
+    const u = db
+      .prepare(
+        `INSERT INTO users (client_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, 'CLIENT')`
+      )
+      .run(clientId, params.contactName, params.email, params.passwordHash);
+    return { clientId, userId: Number(u.lastInsertRowid) };
+  }
+);

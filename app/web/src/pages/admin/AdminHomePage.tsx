@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { ApiError, api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { Toast, useToast } from '../../components/ui';
 import type {
   AdminActivityItem,
   AdminClientListItem,
   AdminClientsResponse,
-  AdminQueueResponseV2,
 } from '../../types';
+import type { AdminQueueResponseV3, CreateClientResponse } from '../../types-bi3';
 
 const RowArrow = (
   <svg
@@ -26,7 +27,7 @@ const RowArrow = (
   </svg>
 );
 
-/** 判断キューの1行（種別ラベル付き） */
+/** 判断キューの1行（種別ラベル付き）。kind は将来の種別追加に備えて文字列 */
 interface QueueRow {
   key: string;
   projectId: number;
@@ -34,7 +35,9 @@ interface QueueRow {
   clientName: string;
   title: string;
   task: string;
-  kind: '提案の承認' | 'Loopの承認' | '条件変更の希望';
+  kind: string;
+  /** 目立たせる種別（お客様からの希望・修正系） */
+  urgent?: boolean;
   at?: string | null;
 }
 
@@ -58,7 +61,7 @@ export default function AdminHomePage() {
     let cancelled = false;
 
     api
-      .get<AdminQueueResponseV2>('/admin/queue')
+      .get<AdminQueueResponseV3>('/admin/queue')
       .then((res) => {
         if (cancelled) return;
         const mode = res.items?.[0]?.aiMode ?? res.loops?.[0]?.aiMode;
@@ -71,7 +74,7 @@ export default function AdminHomePage() {
             clientName: it.clientName,
             title: it.title || it.rawText,
             task: 'お客様へ送る3案の最終確認',
-            kind: '提案の承認' as const,
+            kind: '提案の承認',
             at: it.createdAt,
           })),
           ...(res.loops ?? []).map((it) => ({
@@ -81,7 +84,7 @@ export default function AdminHomePage() {
             clientName: it.clientName,
             title: it.title,
             task: '「選べる進め方」の承認（価格レンジの確認）',
-            kind: 'Loopの承認' as const,
+            kind: 'Loopの承認',
             at: it.createdAt,
           })),
           ...(res.modifyRequests ?? []).map((it) => ({
@@ -93,9 +96,38 @@ export default function AdminHomePage() {
             task: it.modifyNote
               ? `お客様のご希望: ${it.modifyNote}`
               : '条件の再調整（再分析→再提案）',
-            kind: '条件変更の希望' as const,
+            kind: '条件変更の希望',
+            urgent: true,
             at: it.decidedAt,
           })),
+          /* ---- BI-3: 量産合意書系（バックエンドが提供する場合のみ・防御的） ---- */
+          ...(res.agreements ?? [])
+            .filter((it) => it && it.projectId != null)
+            .map((it) => ({
+              key: `ag-${it.agreementId ?? it.projectId}`,
+              projectId: it.projectId,
+              publicId: it.publicId ?? '',
+              clientName: it.clientName ?? '',
+              title: it.title ?? '量産合意書',
+              task: '量産合意書: お客様の確認待ち',
+              kind: '量産合意書',
+              at: it.createdAt,
+            })),
+          ...(res.agreementChanges ?? [])
+            .filter((it) => it && it.projectId != null)
+            .map((it) => ({
+              key: `agc-${it.agreementId ?? it.projectId}`,
+              projectId: it.projectId,
+              publicId: it.publicId ?? '',
+              clientName: it.clientName ?? '',
+              title: it.title ?? '量産合意書',
+              task: it.customerNote
+                ? `お客様の修正希望: ${it.customerNote}`
+                : '量産合意書の修正（お客様からのご希望）',
+              kind: '合意書の修正希望',
+              urgent: true,
+              at: it.decidedAt ?? it.createdAt,
+            })),
         ];
         setQueueRows(rows);
       })
@@ -171,7 +203,7 @@ export default function AdminHomePage() {
             <span
               className="q-kind"
               style={{
-                color: row.kind === '条件変更の希望' ? 'var(--warn)' : 'var(--accent-deep)',
+                color: row.urgent ? 'var(--warn)' : 'var(--accent-deep)',
               }}
             >
               {row.kind}
@@ -304,32 +336,216 @@ export function ClientListSection({
 /* ================= お客様タブ（ナビ「お客様」直行用） ================= */
 
 export function AdminClientsPage() {
+  const [toastMsg, toastShow, toast] = useToast();
   const [clients, setClients] = useState<AdminClientListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .get<AdminClientsResponse>('/admin/clients')
-      .then((res) => {
-        if (!cancelled) setClients(res.items ?? []);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setClients([]);
-        setError(e instanceof Error ? e.message : 'お客様一覧を取得できませんでした。');
-      });
-    return () => {
-      cancelled = true;
-    };
+  const loadClients = useCallback(async () => {
+    try {
+      const res = await api.get<AdminClientsResponse>('/admin/clients');
+      setClients(res.items ?? []);
+      setError(null);
+    } catch (e) {
+      setClients([]);
+      setError(e instanceof Error ? e.message : 'お客様一覧を取得できませんでした。');
+    }
   }, []);
+
+  useEffect(() => {
+    void loadClients();
+  }, [loadClients]);
+
+  /* ---- BI-3: お客様アカウント発行 ---- */
+  const [formOpen, setFormOpen] = useState(false);
+  const [company, setCompany] = useState('');
+  const [contact, setContact] = useState('');
+  const [email, setEmail] = useState('');
+  const [tempPw, setTempPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState<{
+    publicId: string;
+    company: string;
+    email: string;
+    tempPassword: string;
+  } | null>(null);
+
+  async function createClient() {
+    if (busy) return;
+    if (!company.trim() || !contact.trim() || !email.trim() || !tempPw.trim()) {
+      toast('会社名・担当者名・メール・仮パスワードをすべてご入力ください。');
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.post<CreateClientResponse>('/admin/clients', {
+        companyName: company.trim(),
+        contactName: contact.trim(),
+        email: email.trim(),
+        tempPassword: tempPw,
+      });
+      setCreated({
+        publicId: res.publicId,
+        company: company.trim(),
+        email: email.trim(),
+        tempPassword: tempPw,
+      });
+      setFormOpen(false);
+      setCompany('');
+      setContact('');
+      setEmail('');
+      setTempPw('');
+      toast('お客様を追加しました。仮パスワードをお伝えください。');
+      await loadClients();
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        toast('このメールアドレスは既に登録されています。');
+      } else {
+        toast(e instanceof Error ? e.message : 'お客様の追加に失敗しました。');
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyTempPw() {
+    if (!created) return;
+    try {
+      await navigator.clipboard.writeText(created.tempPassword);
+      toast('仮パスワードをコピーしました。');
+    } catch {
+      toast('コピーできませんでした。表示された文字列を手動でコピーしてください。');
+    }
+  }
 
   return (
     <section className="enter" aria-labelledby="clients-h">
       <h2 id="clients-h" className="sr-only">
         お客様
       </h2>
+
+      <div className="sec-title">
+        お客様アカウントの発行
+        <span className="hint">
+          作成すると、お客様がメール+仮パスワードでログインできるようになります
+        </span>
+      </div>
+
+      {created && (
+        <div className="card setting-card pw-box" role="alert">
+          <h3>{created.company} 様のアカウントを作成しました</h3>
+          <p className="sub">
+            仮パスワード（初回ログイン用のパスワード）はこの画面でしか確認できません。
+            お客様へ安全な方法でお伝えください。この表示を閉じると再表示できません。
+          </p>
+          <div className="state-line">
+            <span className="k">お客様番号</span>
+            <span className="num">{created.publicId}</span>
+          </div>
+          <div className="state-line">
+            <span className="k">ログインID</span>
+            <span className="num">{created.email}</span>
+          </div>
+          <div className="state-line">
+            <span className="k">仮パスワード</span>
+            <span className="num pw-value">{created.tempPassword}</span>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-primary btn-sm" onClick={copyTempPw}>
+              仮パスワードをコピー
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setCreated(null)}
+            >
+              閉じる（以後表示されません）
+            </button>
+          </div>
+        </div>
+      )}
+
+      {formOpen ? (
+        <div className="card setting-card" style={{ marginBottom: 16 }}>
+          <h3>お客様を追加</h3>
+          <p className="sub">
+            1画面1判断: 4項目だけで発行できます。細かな見え方の設定は、作成後の会社ページから行えます。
+          </p>
+          <div className="form-grid">
+            <div className="form-field">
+              <label htmlFor="nc-company">会社名（必須）</label>
+              <input
+                id="nc-company"
+                className="text-input"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="例）株式会社サンプル"
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="nc-contact">担当者名（必須）</label>
+              <input
+                id="nc-contact"
+                className="text-input"
+                value={contact}
+                onChange={(e) => setContact(e.target.value)}
+                placeholder="例）山田 花子"
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="nc-email">メールアドレス（ログインID・必須）</label>
+              <input
+                id="nc-email"
+                className="text-input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="例）hanako@example.co.jp"
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="nc-pw">仮パスワード（必須）</label>
+              <input
+                id="nc-pw"
+                className="text-input"
+                value={tempPw}
+                onChange={(e) => setTempPw(e.target.value)}
+                placeholder="例）初回ログイン用の文字列"
+              />
+            </div>
+          </div>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={createClient}
+              disabled={busy}
+            >
+              {busy ? '作成しています…' : 'この内容で作成'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setFormOpen(false)}
+              disabled={busy}
+            >
+              やめる
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginBottom: 16 }}>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => setFormOpen(true)}
+          >
+            ＋ お客様を追加
+          </button>
+        </div>
+      )}
+
       <ClientListSection clients={clients} error={error} titleId="t-clients-tab" />
+      <Toast msg={toastMsg} show={toastShow} />
     </section>
   );
 }

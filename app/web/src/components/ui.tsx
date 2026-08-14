@@ -72,3 +72,11 @@ export function formatQtyFrom(q: string | number): string {
 export function formatLeadDays(d: string | number): string {
   return typeof d === 'number' ? `約${d}日` : d;
 }
+
+/** ファイルサイズ表示（BI-3: 資料一覧用） */
+export function formatBytes(n?: number | null): string {
+  if (n == null || Number.isNaN(n)) return '';
+  if (n < 1024) return `${n}B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)}KB`;
+  return `${(n / 1024 / 1024).toFixed(1)}MB`;
+}

@@ -26,7 +26,16 @@ import { audit, timeline, appendApproval } from '../repo/audit.js';
 import { generateProposalsForProject } from '../services/consultation.js';
 import { getLatestLoop, listLoopOptions, listLoopsForProject } from '../repo/loops.js';
 import { listQuoteConditions, listQuotesForProject, listRfqRecipientIds, listRfqsForProject } from '../repo/rfqs.js';
+import { listClientProjects } from '../repo/clients.js';
 import {
+  getLatestVisibleAgreementForClient,
+  listAgreementsForProject,
+} from '../repo/agreements.js';
+import { listDocumentsForProject } from '../repo/documents.js';
+import {
+  toAgreementClientView,
+  toAgreementStaffView,
+  toDocumentStaffView,
   toLoopClientView,
   toLoopStaffView,
   toProposalView,
@@ -37,10 +46,11 @@ import {
 } from '../views.js';
 import type {
   AnswersResponse,
+  ClientProjectsResponse,
   GenerateProposalsResponse,
   LoopClientView,
-  ProjectViewClientV2,
-  ProjectViewStaffV2,
+  ProjectViewClientV3,
+  ProjectViewStaffV3,
   SelectResponse,
 } from '../../../shared/api-types.js';
 
@@ -52,6 +62,21 @@ function parseId(raw: string): number | null {
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : null;
 }
+
+// ---- GET /api/projects （CLIENT: 自社案件一覧。リピート入口の選択用）----
+projectsRouter.get('/projects', requireAuth, requireClient, (req, res) => {
+  const user = req.user!;
+  const body: ClientProjectsResponse = {
+    items: listClientProjects(user.client_id!).map((p) => ({
+      projectId: p.id,
+      publicId: p.public_id,
+      title: p.title,
+      status: p.status,
+      updatedAt: p.updated_at,
+    })),
+  };
+  res.json(body);
+});
 
 // ---- POST /api/projects/:id/answers （CLIENT）----
 const answersSchema = z.object({
@@ -164,13 +189,16 @@ projectsRouter.post('/projects/:id/proposals', requireAuth, requireClient, async
     refId: proposalId,
   });
 
+  // BI-3: 金額非表示モードの案件は顧客レスポンスから価格レンジを除外
+  const hidePrices = project.hide_initial_prices === 1;
   const body: GenerateProposalsResponse =
     status === 'APPROVED'
       ? {
           proposalId,
           status: 'approved',
           aiMode: result.aiMode,
-          options: toProposalView(getLatestProposal(projectId)!, listOptions(proposalId)).options,
+          options: toProposalView(getLatestProposal(projectId)!, listOptions(proposalId), hidePrices)
+            .options,
         }
       : { proposalId, status: 'pending_approval', aiMode: result.aiMode };
   res.json(body);
@@ -187,10 +215,15 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
     if (!project) return void res.status(404).json(NOT_FOUND);
     const requirement = getLatestRequirement(projectId);
     const proposal = getLatestProposal(projectId);
-    let proposalPart: ProjectViewClientV2['proposal'] = { state: 'none' };
+    // BI-3: 金額非表示モードの案件は価格レンジをレスポンスから除外（UIは説明文表示）
+    const hidePrices = project.hide_initial_prices === 1;
+    let proposalPart: ProjectViewClientV3['proposal'] = { state: 'none' };
     if (proposal) {
       if (proposal.status === 'APPROVED' || proposal.status === 'SELECTED') {
-        proposalPart = { state: 'ready', proposal: toProposalView(proposal, listOptions(proposal.id)) };
+        proposalPart = {
+          state: 'ready',
+          proposal: toProposalView(proposal, listOptions(proposal.id), hidePrices),
+        };
       } else {
         // PENDING/REVISION中は中身を見せない（担当者確認中）
         proposalPart = { state: 'pending_approval' };
@@ -207,7 +240,9 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
     ) {
       loopPart = toLoopClientView(latestLoop, listLoopOptions(latestLoop.id));
     }
-    const body: ProjectViewClientV2 = {
+    // BI-3: 合意書（顧客が見られるのは PENDING_CUSTOMER / AGREED のみ。DRAFTは非公開）
+    const agreement = getLatestVisibleAgreementForClient(projectId);
+    const body: ProjectViewClientV3 = {
       projectId: project.id,
       publicId: project.public_id,
       title: project.title,
@@ -218,6 +253,8 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
       proposal: proposalPart,
       aiMode: (requirement?.ai_mode as 'live' | 'mock') ?? 'mock',
       loop: loopPart,
+      agreement: agreement ? toAgreementClientView(agreement) : null,
+      hideInitialPrices: hidePrices,
     };
     return void res.json(body);
   }
@@ -228,7 +265,7 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
   const requirement = getLatestRequirement(projectId);
   const proposal = getLatestProposal(projectId);
   const dna = getProjectDna(projectId);
-  const body: ProjectViewStaffV2 = {
+  const body: ProjectViewStaffV3 = {
     projectId: project.id,
     publicId: project.public_id,
     title: project.title,
@@ -249,6 +286,10 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
     loops: listLoopsForProject(projectId).map((l) => toLoopStaffView(l, listLoopOptions(l.id))),
     rfqs: listRfqsForProject(projectId).map((r) => toRfqView(r, listRfqRecipientIds(r.id))),
     quotes: listQuotesForProject(projectId).map((q) => toQuoteView(q, listQuoteConditions(q.id))),
+    // BI-3: 合意書・資料・金額非表示モード
+    agreements: listAgreementsForProject(projectId).map(toAgreementStaffView),
+    documents: listDocumentsForProject(projectId).map(toDocumentStaffView),
+    hideInitialPrices: project.hide_initial_prices === 1,
   };
   res.json(body);
 });

@@ -18,12 +18,19 @@ import type {
   LoopClientView,
   LoopDecideResponse,
   LoopOptionClientView,
-  ProjectViewClientV2,
   ProposalOptionView,
   QuestionView,
   SelectResponse,
   UnderstandingField,
 } from '../types';
+import type {
+  AgreementView,
+  ClientProjectListItem,
+  ClientProjectsResponse,
+  DocumentView,
+  DocumentsResponse,
+  ProjectViewClientV3,
+} from '../types-bi3';
 
 type Step =
   | 'input'
@@ -36,7 +43,11 @@ type Step =
   /* ---- BI-2: 選べる進め方（商流Loop） ---- */
   | 'loop'
   | 'modify_pending'
-  | 'loop_done';
+  | 'loop_done'
+  /* ---- BI-3: 量産合意書（G-02） ---- */
+  | 'agreement'
+  | 'agreement_change_sent'
+  | 'agreement_done';
 
 const ENTRY_CHIPS: { route: EntryRoute; label: string; placeholder: string }[] = [
   {
@@ -85,6 +96,68 @@ const EXAMPLES: { key: string; label: string; text: string }[] = [
     text: '展示会の来場者に配るオリジナルトートバッグを作りたい。A4が入るサイズでロゴを1色印刷。3,000枚くらい、1枚300円以内におさめたい。',
   },
 ];
+
+/* ---- BI-3: 入口別の実例テンプレ（タップで入力欄へ雛形挿入） ---- */
+const TEMPLATES: Record<EntryRoute, { label: string; text: string }[]> = {
+  IDEA: [
+    {
+      label: 'ざっくり相談の見本',
+      text: '◯◯な人向けに、◯◯できる商品を作ってみたい。参考にしているのは◯◯です。数量や予算はまだ決まっていません。',
+    },
+    {
+      label: 'ブランドグッズの見本',
+      text: '自社ブランド「◯◯」のオリジナルグッズを作りたい。候補は◯◯や◯◯。ブランドの雰囲気は◯◯な感じです。',
+    },
+    {
+      label: '課題から相談の見本',
+      text: '◯◯という悩みを解決できる商品を作れないか相談したい。使う人は◯◯で、◯◯なときに使うイメージです。',
+    },
+  ],
+  PRODUCT: [
+    {
+      label: '同等品を作りたい',
+      text: 'この商品（URL/写真: ◯◯）と同等品を◯個、◯月までに作りたい。変更したい点: ◯◯',
+    },
+    {
+      label: 'ロゴ入りで作りたい',
+      text: '◯◯（商品名）に自社ロゴを入れて◯個作りたい。色は◯◯、1個あたりの予算は◯円くらいを考えています。',
+    },
+  ],
+  SPEC: [
+    {
+      label: '仕様を列挙する',
+      text: '仕様書・図面があります。素材: ◯◯／サイズ: ◯◯／色: ◯◯／数量: ◯個／希望時期: ◯月。図面どおりに作れる工場と概算を知りたい。',
+    },
+    {
+      label: '一部だけ未定',
+      text: '仕様はほぼ決まっています。素材: ◯◯／サイズ: ◯◯／数量: ◯個。◯◯だけ未定なので、あわせて相談したい。',
+    },
+  ],
+  REPEAT: [
+    {
+      label: '前回と同じものを',
+      text: '前回の◯◯を、同じ仕様でもう一度◯個作りたい。希望時期は◯月です。',
+    },
+    {
+      label: '一部変えて再注文',
+      text: '前回の◯◯をベースに、◯◯を変えて作りたい。数量は◯個、そのほかは前回と同じで大丈夫です。',
+    },
+  ],
+};
+
+/* ---- BI-3: 決めることマップ（常設の横レール） ---- */
+const DMAP_STAGES: { name: string; you: string; cx: string }[] = [
+  { name: '相談', you: '作りたいものを言葉にする', cx: '内容を整理して3案をご用意' },
+  { name: '提案', you: '進め方を1つ選ぶ', cx: '数量・価格・納期の違いをご説明' },
+  { name: '工場確認', you: '気になる条件があれば伝える', cx: '工場へ見積・条件を正式確認' },
+  { name: 'サンプル', you: '実物を見てOK・直したい点を伝える', cx: 'サンプル手配と改善の橋渡し' },
+  { name: '量産合意', you: '品質基準（量産合意書）に合意する', cx: '合意書を作成し工場と共有' },
+  { name: '生産', you: '（お待ちいただくだけ）', cx: '進捗を管理してご報告' },
+  { name: '検品', you: '（お待ちいただくだけ）', cx: '決めた基準どおりかを検査' },
+  { name: 'お届け', you: '受け取って中身を確認する', cx: '輸送・通関を手配して納品' },
+];
+
+const MAX_FILE_BYTES = 15 * 1024 * 1024;
 
 const PROC_STAGES = [
   'ご要望を整理しています…',
@@ -136,8 +209,76 @@ export default function ConsultPage() {
   const [deciding, setDeciding] = useState(false);
   const modifiedLoopId = useRef<number | null>(null);
 
+  /* ---- BI-3: リピート引き継ぎ / 添付 / 量産合意書 ---- */
+  const [pastProjects, setPastProjects] = useState<ClientProjectListItem[] | null>(null);
+  const [sourceProjectId, setSourceProjectId] = useState<number | ''>('');
+  const [attached, setAttached] = useState<{ id: number; file: File; url: string | null }[]>(
+    [],
+  );
+  const attachSeq = useRef(1);
+  const [agreement, setAgreement] = useState<AgreementView | null>(null);
+  const [agBusy, setAgBusy] = useState(false);
+  const [agChangeOpen, setAgChangeOpen] = useState(false);
+  const [agNote, setAgNote] = useState('');
+
   const canvasRef = useRef<HTMLTextAreaElement>(null);
   const submittedText = useRef('');
+
+  /* REPEAT選択時: 自社の過去案件一覧（取得できない環境では静かに非表示） */
+  useEffect(() => {
+    if (entry !== 'REPEAT' || pastProjects !== null) return;
+    let cancelled = false;
+    api
+      .get<ClientProjectsResponse | ClientProjectListItem[]>('/projects')
+      .then((res) => {
+        if (cancelled) return;
+        setPastProjects(Array.isArray(res) ? res : (res.items ?? []));
+      })
+      .catch(() => {
+        if (!cancelled) setPastProjects([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entry, pastProjects]);
+
+  /* テンプレ挿入（入力済みの場合は確認してから置き換え） */
+  function insertTemplate(t: string) {
+    if (text.trim() && text.trim() !== t.trim()) {
+      const ok = window.confirm('入力欄の内容をテンプレートで置き換えます。よろしいですか？');
+      if (!ok) return;
+    }
+    setText(t);
+    setShortHint(false);
+    canvasRef.current?.focus();
+  }
+
+  /* 添付ファイルの追加・削除（相談フォーム） */
+  function addAttachments(list: File[] | null) {
+    if (!list || list.length === 0) return;
+    setAttached((cur) => {
+      const next = [...cur];
+      for (const f of list) {
+        if (f.size > MAX_FILE_BYTES) {
+          toast(`「${f.name}」は15MBを超えているため添付できません。`);
+          continue;
+        }
+        next.push({
+          id: attachSeq.current++,
+          file: f,
+          url: f.type.startsWith('image/') ? URL.createObjectURL(f) : null,
+        });
+      }
+      return next;
+    });
+  }
+  function removeAttachment(aid: number) {
+    setAttached((cur) => {
+      const target = cur.find((x) => x.id === aid);
+      if (target?.url) URL.revokeObjectURL(target.url);
+      return cur.filter((x) => x.id !== aid);
+    });
+  }
 
   /* 画面切替時: 先頭へスクロール */
   useEffect(() => {
@@ -182,7 +323,28 @@ export default function ConsultPage() {
         text: trimmed,
         entryRoute: entry ?? 'IDEA',
         ...(refUrl.trim() ? { refUrl: refUrl.trim() } : {}),
+        ...(entry === 'REPEAT' && sourceProjectId !== ''
+          ? { sourceProjectId: Number(sourceProjectId) }
+          : {}),
       });
+
+      /* BI-3: 添付ファイルの送信（失敗しても相談フローは継続） */
+      if (attached.length > 0) {
+        let failed = 0;
+        for (const a of attached) {
+          try {
+            const fd = new FormData();
+            fd.append('file', a.file);
+            await api.postForm(`/projects/${res.projectId}/documents`, fd);
+          } catch {
+            failed += 1;
+          }
+        }
+        if (failed > 0) {
+          toast('一部の参考資料をお送りできませんでした。あとで案件画面から追加できます。');
+        }
+      }
+
       setProjectId(res.projectId);
       setPublicId(res.publicId);
       setUnderstanding(res.understanding ?? []);
@@ -246,7 +408,7 @@ export default function ConsultPage() {
   const pollProject = useCallback(async () => {
     if (!projectId) return;
     try {
-      const pj = await api.get<ProjectViewClientV2>(`/projects/${projectId}`);
+      const pj = await api.get<ProjectViewClientV3>(`/projects/${projectId}`);
       if (pj.aiMode) setAiMode(pj.aiMode);
       if (pj.proposal.state === 'ready' && pj.proposal.proposal.options.length) {
         setOptions(pj.proposal.proposal.options);
@@ -266,12 +428,23 @@ export default function ConsultPage() {
     return () => window.clearInterval(t);
   }, [step, pollProject]);
 
-  /* ---------------- BI-2: 選べる進め方（承認済みLoop）の10sポーリング ---------------- */
+  /* ---------------- BI-2/BI-3: 承認済みLoop・量産合意書の10sポーリング ---------------- */
   const pollLoop = useCallback(async () => {
     if (!projectId) return;
     try {
-      const pj = await api.get<ProjectViewClientV2>(`/projects/${projectId}`);
+      const pj = await api.get<ProjectViewClientV3>(`/projects/${projectId}`);
       if (pj.aiMode) setAiMode(pj.aiMode);
+
+      /* BI-3: 量産合意書がお客様確認待ちになったら合意画面へ（Loopより優先） */
+      const ag = pj.agreement;
+      if (ag && ag.status === 'PENDING_CUSTOMER') {
+        setAgreement(ag);
+        setAgChangeOpen(false);
+        setStep('agreement');
+        emitVisual('AGREEMENT_READY'); // Presentation Layer 接続点
+        return;
+      }
+
       const lp = pj.loop;
       if (
         lp &&
@@ -291,11 +464,51 @@ export default function ConsultPage() {
   }, [projectId, setAiMode]);
 
   useEffect(() => {
-    if (step !== 'done' && step !== 'modify_pending') return;
+    if (
+      step !== 'done' &&
+      step !== 'modify_pending' &&
+      step !== 'loop_done' &&
+      step !== 'agreement_change_sent'
+    )
+      return;
     void pollLoop();
     const t = window.setInterval(() => void pollLoop(), 10_000);
     return () => window.clearInterval(t);
   }, [step, pollLoop]);
+
+  /* ---------------- BI-3: 量産合意書の決定（APPROVE / REQUEST_CHANGE） ---------------- */
+  async function decideAgreement(decision: 'APPROVE' | 'REQUEST_CHANGE') {
+    if (!agreement || agBusy) return;
+    const note = agNote.trim();
+    if (decision === 'REQUEST_CHANGE' && !note) {
+      toast('修正したい点をご記入ください。');
+      return;
+    }
+    setAgBusy(true);
+    try {
+      await api.post(`/agreements/${agreement.id}/decide`, {
+        decision,
+        ...(decision === 'REQUEST_CHANGE' ? { note } : {}),
+      });
+      if (decision === 'APPROVE') {
+        setAgreement({ ...agreement, status: 'AGREED' });
+        setStep('agreement_done');
+        emitVisual('AGREEMENT_AGREED'); // Presentation Layer 接続点
+      } else {
+        setAgChangeOpen(false);
+        setAgNote('');
+        setStep('agreement_change_sent');
+      }
+    } catch (e) {
+      toast(
+        e instanceof Error
+          ? e.message
+          : '送信できませんでした。時間をおいてもう一度お試しください。',
+      );
+    } finally {
+      setAgBusy(false);
+    }
+  }
 
   /* ---------------- BI-2: Loopの決定（ACCEPT / MODIFY） ---------------- */
   async function acceptLoopOption(opt: LoopOptionClientView) {
@@ -387,16 +600,54 @@ export default function ConsultPage() {
     setModifyOpen(false);
     setModifyNote('');
     modifiedLoopId.current = null;
+    /* BI-3 */
+    setSourceProjectId('');
+    setAttached((cur) => {
+      for (const a of cur) if (a.url) URL.revokeObjectURL(a.url);
+      return [];
+    });
+    setAgreement(null);
+    setAgChangeOpen(false);
+    setAgNote('');
     emitVisual('CANVAS_OPEN'); // Presentation Layer 接続点
   }
 
   const placeholder =
     ENTRY_CHIPS.find((c) => c.route === entry)?.placeholder ?? DEFAULT_PLACEHOLDER;
 
+  /* ---- BI-3: 決めることマップの現在地 ---- */
+  const showDmap = step !== 'input' && step !== 'processing';
+  const dmapIdx = (() => {
+    switch (step) {
+      case 'understand':
+        return 0;
+      case 'generating':
+      case 'pending':
+      case 'proposal':
+        return 1;
+      case 'done':
+      case 'loop':
+      case 'modify_pending':
+        return 2;
+      case 'loop_done':
+        return 3;
+      case 'agreement':
+      case 'agreement_change_sent':
+        return 4;
+      case 'agreement_done':
+        return 5;
+      default:
+        return 0;
+    }
+  })();
+
   /* ================= render ================= */
 
   return (
     <>
+      {/* ---------- BI-3: 決めることマップ（常設） ---------- */}
+      {showDmap && <DecisionMap current={dmapIdx} />}
+
       {/* ---------- STEP 1: 相談キャンバス ---------- */}
       {step === 'input' && (
         <section className="step enter" aria-labelledby="h-input">
@@ -423,6 +674,50 @@ export default function ConsultPage() {
             ))}
           </div>
 
+          {entry && (
+            <div className="tpl-chips" role="group" aria-label="実例テンプレ（穴埋め式の例文）">
+              <span className="tpl-label">
+                実例テンプレ（タップで挿入・◯◯を書き換えるだけ）:
+              </span>
+              {TEMPLATES[entry].map((t) => (
+                <button
+                  key={t.label}
+                  type="button"
+                  className="chip chip-tpl"
+                  onClick={() => insertTemplate(t.text)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {entry === 'REPEAT' && pastProjects !== null && pastProjects.length > 0 && (
+            <>
+              <label className="field-label" htmlFor="src-project" style={{ marginTop: 18 }}>
+                前回の案件（内容を引き継ぎます）
+              </label>
+              <select
+                id="src-project"
+                className="past-select"
+                value={sourceProjectId}
+                onChange={(e) =>
+                  setSourceProjectId(e.target.value === '' ? '' : Number(e.target.value))
+                }
+              >
+                <option value="">選択しない（新規として相談）</option>
+                {pastProjects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}（{p.publicId}）
+                  </option>
+                ))}
+              </select>
+              <p className="note" style={{ marginTop: 6 }}>
+                選ぶと前回の仕様を引き継ぎ、変わる点だけをおうかがいします。
+              </p>
+            </>
+          )}
+
           <label className="field-label" htmlFor="canvas">
             ご相談内容
           </label>
@@ -447,6 +742,43 @@ export default function ConsultPage() {
             value={refUrl}
             onChange={(e) => setRefUrl(e.target.value)}
           />
+
+          <label className="field-label">参考資料（任意）</label>
+          <div className="attach-row">
+            {attached.map((a) => (
+              <span className="thumb-chip" key={a.id}>
+                <span className="thumb">
+                  {a.url ? <img src={a.url} alt="" /> : FileSvg}
+                </span>
+                {a.file.name}
+                <button
+                  type="button"
+                  className="rm"
+                  aria-label={`${a.file.name} を外す`}
+                  onClick={() => removeAttachment(a.id)}
+                >
+                  &#215;
+                </button>
+              </span>
+            ))}
+            <label className="example-link" style={{ cursor: 'pointer' }}>
+              ＋ ファイルを選ぶ
+              <input
+                type="file"
+                multiple
+                accept="image/*,.pdf,.xlsx,.xls,.csv,.docx,.doc,.zip"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const list = e.target.files ? Array.from(e.target.files) : null;
+                  e.target.value = '';
+                  addAttachments(list);
+                }}
+              />
+            </label>
+          </div>
+          <p className="note" style={{ marginTop: 6 }}>
+            参考画像・図面などあればどうぞ（15MBまで）
+          </p>
 
           <div className="example-links" role="group" aria-label="例文">
             <span
@@ -668,19 +1000,28 @@ export default function ConsultPage() {
                 {opt.recommended && <span className="ribbon">おすすめ</span>}
                 <h3 className="plan-name">{opt.title}</h3>
                 <p className="plan-concept">{opt.concept}</p>
-                <div className="plan-price-row">
-                  <span className="price">
-                    {formatPrice(opt.priceRangeJpy)}
-                    <span className="unit-label">／個</span>
-                  </span>
-                </div>
-                <p className="plan-price-note">
-                  <Tt
-                    term="概算"
-                    desc="工場に正式確認する前の目安金額です。仕様確定後に正式なお見積りをお出しします。"
-                  />
-                  （工場確認前の目安）
-                </p>
+                {opt.priceRangeJpy ? (
+                  <>
+                    <div className="plan-price-row">
+                      <span className="price">
+                        {formatPrice(opt.priceRangeJpy)}
+                        <span className="unit-label">／個</span>
+                      </span>
+                    </div>
+                    <p className="plan-price-note">
+                      <Tt
+                        term="概算"
+                        desc="工場に正式確認する前の目安金額です。仕様確定後に正式なお見積りをお出しします。"
+                      />
+                      （工場確認前の目安）
+                    </p>
+                  </>
+                ) : (
+                  /* BI-3: 金額非表示モード（hide_initial_prices） */
+                  <p className="plan-price-hidden">
+                    概算金額は、工場確認のうえ担当者からご提示します
+                  </p>
+                )}
                 <dl className="plan-meta">
                   <div>
                     <dt>
@@ -789,11 +1130,17 @@ export default function ConsultPage() {
               <ReceiptLine k="選んだ案" v={`${chosen.title} — ${chosen.concept}`} />
               <ReceiptLine
                 k="概算単価"
-                v={`${formatPrice(chosen.priceRangeJpy)}（工場確認前の目安）`}
+                v={
+                  chosen.priceRangeJpy
+                    ? `${formatPrice(chosen.priceRangeJpy)}（工場確認前の目安）`
+                    : '概算金額は、工場確認のうえ担当者からご提示します'
+                }
               />
               {refUrl.trim() && <ReceiptLine k="参考URL" v={refUrl.trim()} />}
             </div>
           </div>
+
+          {projectId && <CustomerDocsBox projectId={projectId} toast={toast} />}
 
           <div className="step3-cta">
             <button type="button" className="btn btn-ghost" onClick={() => setStep('proposal')}>
@@ -833,19 +1180,27 @@ export default function ConsultPage() {
                 {opt.recommended && <span className="ribbon">おすすめ</span>}
                 <h3 className="plan-name">{opt.title}</h3>
                 <p className="plan-concept">{opt.concept}</p>
-                <div className="plan-price-row">
-                  <span className="price">
-                    {formatPrice(opt.customerPriceRange)}
-                    <span className="unit-label">／個</span>
-                  </span>
-                </div>
-                <p className="plan-price-note">
-                  <Tt
-                    term="概算"
-                    desc="工場との確認をふまえた目安金額です。数量とお届け先が確定した時点で正式なお見積りをお出しします。"
-                  />
-                  （工場との確認をふまえた目安）
-                </p>
+                {opt.customerPriceRange ? (
+                  <>
+                    <div className="plan-price-row">
+                      <span className="price">
+                        {formatPrice(opt.customerPriceRange)}
+                        <span className="unit-label">／個</span>
+                      </span>
+                    </div>
+                    <p className="plan-price-note">
+                      <Tt
+                        term="概算"
+                        desc="工場との確認をふまえた目安金額です。数量とお届け先が確定した時点で正式なお見積りをお出しします。"
+                      />
+                      （工場との確認をふまえた目安）
+                    </p>
+                  </>
+                ) : (
+                  <p className="plan-price-hidden">
+                    概算金額は、工場確認のうえ担当者からご提示します
+                  </p>
+                )}
                 <dl className="plan-meta">
                   <div>
                     <dt>
@@ -1006,10 +1361,279 @@ export default function ConsultPage() {
               <ReceiptLine k="選んだ進め方" v={`${loopChosen.title} — ${loopChosen.concept}`} />
               <ReceiptLine
                 k="概算単価"
-                v={`${formatPrice(loopChosen.customerPriceRange)}（工場との確認をふまえた目安）`}
+                v={
+                  loopChosen.customerPriceRange
+                    ? `${formatPrice(loopChosen.customerPriceRange)}（工場との確認をふまえた目安）`
+                    : '概算金額は、工場確認のうえ担当者からご提示します'
+                }
               />
               <ReceiptLine k="数量目安" v={formatQtyFrom(loopChosen.qtyFrom)} />
               <ReceiptLine k="お届け目安" v={formatLeadDays(loopChosen.leadDays)} />
+            </div>
+          </div>
+
+          {projectId && <CustomerDocsBox projectId={projectId} toast={toast} />}
+
+          <div className="step3-cta">
+            <button type="button" className="btn btn-ghost" onClick={restart}>
+              新しい相談を始める
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* ---------- BI-3: 量産合意書のご確認 ---------- */}
+      {step === 'agreement' && agreement && (
+        <section className="step enter" aria-labelledby="h-agr">
+          <h2 className="h-main" id="h-agr">
+            量産前の品質のとりきめを
+            <br />
+            ご確認ください
+          </h2>
+          <p className="h-sub">
+            量産合意書（量産で守る品質基準を1枚にまとめたもの）です。
+            ご合意いただいた基準で、工場との生産・検品を進めます。
+          </p>
+          {publicId && (
+            <p className="note">
+              相談番号: <span className="num">{publicId}</span>
+              {agreement.publicId && (
+                <>
+                  {' '}
+                  ・ 合意書番号: <span className="num">{agreement.publicId}</span>
+                </>
+              )}
+            </p>
+          )}
+
+          {agreement.approvedSampleDocId != null && (
+            <div className="card agr-card">
+              <h3>承認サンプル</h3>
+              <img
+                className="agr-photo"
+                src={`/api/documents/${agreement.approvedSampleDocId}/file`}
+                alt="承認サンプルの写真"
+              />
+              <p className="note" style={{ marginTop: 8 }}>
+                この<Tt term="承認サンプル" desc="量産の基準となる見本です。量産品はこのサンプルと同じ品質で作られます。" />
+                を基準として量産します。
+              </p>
+            </div>
+          )}
+
+          <div className="card agr-card">
+            <h3>チェック項目（量産で守る基準）</h3>
+            <ol className="agr-checks">
+              {(agreement.checkItems ?? []).map((c, i) => (
+                <li key={i}>
+                  <strong>{c.name}</strong>
+                  <span className="crit">{c.criteriaJa}</span>
+                  {c.method && <span className="method">確認方法: {c.method}</span>}
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          {(agreement.limitSamples ?? []).length > 0 && (
+            <div className="card agr-card">
+              <h3>
+                <Tt
+                  term="限度見本"
+                  desc="「ここまでは許容（OK）」「これは不良（NG）」の境目を写真で決めておく見本です。認識のずれによるトラブルを防ぎます。"
+                />
+                （OK/NGの実例写真）
+              </h3>
+              <div className="agr-limits">
+                {(agreement.limitSamples ?? []).map((s, i) => (
+                  <figure key={i} className="agr-limit">
+                    <span
+                      className={`chip-state ${s.label === 'NG' ? 'st-alert' : 'st-ok'}`}
+                    >
+                      {s.label === 'NG' ? 'NG（これは不良）' : 'OK限度（ここまで許容）'}
+                    </span>
+                    <img src={`/api/documents/${s.docId}/file`} alt="" />
+                    {s.note && <figcaption>{s.note}</figcaption>}
+                  </figure>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(() => {
+            const tol = agreement.tolerance ?? agreement.toleranceJson;
+            const resp = agreement.responsibility ?? agreement.responsibilityJson;
+            return (
+              <>
+                {tol && (
+                  <div className="card agr-card">
+                    <h3>許容条件（あらかじめ決めておく許容範囲）</h3>
+                    <div>
+                      <ReceiptLine
+                        k="不良の許容率"
+                        v={tol.defectRatePct != null ? `${tol.defectRatePct}%` : '—'}
+                      />
+                      <ReceiptLine
+                        k="予備数"
+                        v={tol.spareQty != null ? `${tol.spareQty}個` : '—'}
+                      />
+                      {tol.note && <ReceiptLine k="補足" v={tol.note} />}
+                    </div>
+                  </div>
+                )}
+                {resp && (
+                  <div className="card agr-card">
+                    <h3>責任分界（万一のときの役割分担）</h3>
+                    <div>
+                      <ReceiptLine k="検品合格後" v={resp.inspectionPass || '—'} />
+                      <ReceiptLine k="市場での不具合" v={resp.marketDefect || '—'} />
+                      <ReceiptLine k="補償" v={resp.compensation || '—'} />
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          {agChangeOpen ? (
+            <div className="card loop-modify-box">
+              <h3>修正を希望する</h3>
+              <p className="sub">
+                気になる点をそのままの言葉でお書きください。担当者が合意書を修正し、
+                あらためてご確認いただきます。
+              </p>
+              <textarea
+                className="textarea-input"
+                value={agNote}
+                onChange={(e) => setAgNote(e.target.value)}
+                placeholder="例）ロゴの色ズレの基準を、もう少し具体的に決めておきたい"
+                aria-label="修正したい点"
+              />
+              <div className="step3-cta" style={{ marginTop: 18 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => decideAgreement('REQUEST_CHANGE')}
+                  disabled={agBusy}
+                >
+                  {agBusy ? '送信しています…' : 'この内容で修正を依頼する'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setAgChangeOpen(false)}
+                  disabled={agBusy}
+                >
+                  やめる
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="step3-cta">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => decideAgreement('APPROVE')}
+                disabled={agBusy}
+              >
+                {agBusy ? '送信しています…' : 'この内容で合意する'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setAgChangeOpen(true)}
+                disabled={agBusy}
+              >
+                修正を希望する
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ---------- BI-3: 修正希望 送信後 ---------- */}
+      {step === 'agreement_change_sent' && (
+        <section className="step enter" aria-live="polite">
+          <h2 className="h-main" style={{ fontSize: 22 }}>
+            担当者が合意書を修正しています
+          </h2>
+          <div className="pending-card card">
+            <span className="pending-icon" aria-hidden="true">
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v6l4 2" />
+              </svg>
+            </span>
+            <div>
+              <div className="pending-title">
+                ご指摘の内容をもとに、担当者が量産合意書を修正しています。
+              </div>
+              <p className="pending-desc">
+                修正版ができると、この画面にあらためて表示されます。
+                このままお待ちいただいても、後で開き直していただいても大丈夫です。
+              </p>
+              {publicId && (
+                <p className="note">
+                  相談番号: <span className="num">{publicId}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ---------- BI-3: 合意完了（AGREED） ---------- */}
+      {step === 'agreement_done' && (
+        <section className="step enter" aria-labelledby="h-agr-done">
+          <div className="card done-hero">
+            <div className="done-check">
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            <p style={{ marginBottom: 10 }}>
+              <span className="chip-state st-ok">AGREED（合意済み）</span>
+            </p>
+            <h2 className="done-title" id="h-agr-done">
+              品質のとりきめに合意しました。
+              <br />
+              この基準で量産・検品を進めます。
+            </h2>
+            <div className="done-next">
+              <strong>次にやること</strong>
+              特にありません。生産の進捗は担当者からご報告します。
+              上の「決めることマップ」のとおり、次は生産・検品に進みます。
+            </div>
+          </div>
+
+          <div className="card receipt">
+            <h3>合意内容の控え</h3>
+            <div>
+              <ReceiptLine k="相談番号" v={publicId ?? '—'} />
+              <ReceiptLine k="合意書番号" v={agreement?.publicId ?? '—'} />
+              <ReceiptLine
+                k="チェック項目"
+                v={`${(agreement?.checkItems ?? []).length}項目（画面でご確認いただいた基準）`}
+              />
+              <ReceiptLine k="合意日時" v={new Date().toLocaleString('ja-JP')} />
             </div>
           </div>
 
@@ -1027,6 +1651,162 @@ export default function ConsultPage() {
 }
 
 /* ---------------- 小物 ---------------- */
+
+const FileSvg = (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+    <path d="M14 2v6h6" />
+  </svg>
+);
+
+/* ---------------- BI-3: 決めることマップ ---------------- */
+
+function DecisionMap({ current }: { current: number }) {
+  return (
+    <div className="card dmap" aria-label="決めることマップ（この先の流れ）">
+      <div className="dmap-head">
+        決めることマップ
+        <span className="dmap-hint">
+          各工程をタップすると「お客様が決めること」が見られます
+        </span>
+      </div>
+      <div className="dmap-rail">
+        {DMAP_STAGES.map((s, i) => (
+          <div
+            key={s.name}
+            className={`dmap-step${i === current ? ' now' : i < current ? ' done' : ''}`}
+          >
+            <span className="dmap-dot" aria-hidden="true" />
+            <Tt
+              term={s.name}
+              desc={`お客様が決めること: ${s.you} ／ Crossimageがやること: ${s.cx}`}
+            />
+            <span className="sr-only">
+              {i < current ? '（完了）' : i === current ? '（現在の工程）' : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- BI-3: 案件画面の参考資料（一覧+追加） ---------------- */
+
+function CustomerDocsBox({
+  projectId,
+  toast,
+}: {
+  projectId: number;
+  toast: (m: string) => void;
+}) {
+  const [docs, setDocs] = useState<DocumentView[] | null>(null);
+  const [available, setAvailable] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get<DocumentsResponse | DocumentView[]>(
+        `/projects/${projectId}/documents`,
+      );
+      setDocs(Array.isArray(res) ? res : (res.items ?? []));
+      setAvailable(true);
+    } catch {
+      /* 旧バックエンド（未対応）や一時エラー時はセクションごと非表示 */
+      setDocs([]);
+      setAvailable(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function upload(list: File[] | null) {
+    if (!list || list.length === 0 || busy) return;
+    setBusy(true);
+    try {
+      let sent = 0;
+      for (const f of list) {
+        if (f.size > MAX_FILE_BYTES) {
+          toast(`「${f.name}」は15MBを超えているため添付できません。`);
+          continue;
+        }
+        const fd = new FormData();
+        fd.append('file', f);
+        await api.postForm(`/projects/${projectId}/documents`, fd);
+        sent += 1;
+      }
+      if (sent > 0) toast('参考資料をお送りしました。担当者が確認します。');
+      await load();
+    } catch (e) {
+      toast(
+        e instanceof Error
+          ? e.message
+          : '送信できませんでした。時間をおいてもう一度お試しください。',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!available) return null;
+
+  return (
+    <div className="card receipt">
+      <h3>参考資料</h3>
+      <p className="note" style={{ marginTop: 0 }}>
+        参考画像・図面などあればどうぞ（15MBまで）
+      </p>
+      <div className="attach-row">
+        {docs?.map((d) => (
+          <span className="thumb-chip" key={d.id}>
+            <span className="thumb">
+              {d.mimeType?.startsWith('image/') ? (
+                <img src={`/api/documents/${d.id}/file`} alt="" />
+              ) : (
+                FileSvg
+              )}
+            </span>
+            <a
+              href={`/api/documents/${d.id}/file`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: 'inherit' }}
+            >
+              {d.title || d.fileName || `資料 #${d.id}`}
+            </a>
+          </span>
+        ))}
+        <label className="example-link" style={{ cursor: 'pointer' }}>
+          {busy ? '送信しています…' : '＋ ファイルを追加'}
+          <input
+            type="file"
+            multiple
+            accept="image/*,.pdf,.xlsx,.xls,.csv,.docx,.doc,.zip"
+            style={{ display: 'none' }}
+            disabled={busy}
+            onChange={(e) => {
+              const list = e.target.files ? Array.from(e.target.files) : null;
+              e.target.value = '';
+              void upload(list);
+            }}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
 
 function ReceiptLine({ k, v }: { k: string; v: string }) {
   return (

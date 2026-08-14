@@ -126,6 +126,17 @@ export const selectOptionTx = db.transaction((proposalId: number, optionId: numb
   );
 });
 
+// BI-3: PENDING_APPROVAL中の価格レンジ編集（STAFF）
+export function updateProposalOptionPrice(
+  proposalId: number,
+  optionKey: string,
+  priceRangeJpy: string
+): void {
+  db.prepare(
+    `UPDATE proposal_options SET price_range_jpy = ? WHERE proposal_id = ? AND option_key = ?`
+  ).run(priceRangeJpy, proposalId, optionKey);
+}
+
 export function listPendingProposals(): (ProposalRow & {
   public_id: string;
   title: string;

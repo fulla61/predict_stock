@@ -11,10 +11,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
+    "@types/multer": "^2.2.0",
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^12.4.1",
     "cookie-parser": "^1.4.7",
     "express": "^4.21.2",
+    "multer": "^2.2.0",
     "tsx": "^4.20.0",
     "zod": "^3.25.76"
   },

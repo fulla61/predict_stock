@@ -76,7 +76,8 @@ export interface ProposalOptionView {
   key: string; // rec | small | cost
   title: string;
   concept: string;
-  priceRangeJpy: string;
+  /** BI-3: projects.hide_initial_prices=1 の案件のCLIENTレスポンスでは省略される（金額非表示モード） */
+  priceRangeJpy?: string;
   qtyFrom: string;
   leadDays: string;
   pros: string[];
@@ -435,4 +436,215 @@ export interface AdminModifyQueueItem {
 export interface AdminQueueResponseV2 extends AdminQueueResponse {
   loops: AdminLoopQueueItem[];
   modifyRequests: AdminModifyQueueItem[];
+}
+
+// ============================================================
+// BI-3（CONTRACT-3）
+// ============================================================
+
+// ---- 資料（documents + 実ファイル） ----
+export type DocumentVisibility = 'CLIENT_VISIBLE' | 'INTERNAL';
+export type DocumentSource = 'CLIENT' | 'STAFF' | 'CN';
+
+/** 顧客向け資料ビュー（サニタイズ済: storage_path・内部ID系は存在しない。CLIENT_VISIBLEのみ返る） */
+export interface DocumentView {
+  id: number;
+  publicId: string; // {ProjectID}-DOC-{NN}
+  title: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  /** アップロード者のロールラベルのみ（内部ユーザー情報は返さない） */
+  uploadedByRole: Role;
+  source: DocumentSource;
+  createdAt: string;
+}
+/** 社内向け資料ビュー（visibility・アップロード者情報つき。storage_pathはAPIに出さない） */
+export interface DocumentStaffView extends DocumentView {
+  projectId: number;
+  visibility: DocumentVisibility;
+  uploadedByName: string | null;
+}
+export interface DocumentsResponse {
+  items: DocumentView[] | DocumentStaffView[];
+}
+// POST /projects/:id/documents (multipart {file, title?, visibility?, source?})
+export interface UploadDocumentResponse {
+  document: DocumentView | DocumentStaffView;
+}
+
+// ---- 30秒記録（NOTE） ----
+export interface ProjectNoteRequest {
+  text: string;
+}
+export interface ProjectNoteResponse {
+  ok: true;
+}
+
+// ---- 量産合意書（Production Agreement = G-02） ----
+export type AgreementStatus = 'DRAFT' | 'PENDING_CUSTOMER' | 'AGREED' | 'SUPERSEDED';
+
+export interface AgreementCheckItem {
+  name: string;
+  criteriaJa: string; // 測れる表現（数値・距離・回数）
+  criteriaZh: string;
+  method: string; // 検査方法（目視/ノギス/抜取 等）
+}
+export interface AgreementLimitSample {
+  docId: number;
+  label: 'OK_LIMIT' | 'NG';
+  note?: string;
+}
+export interface AgreementTolerance {
+  defectRatePct: number;
+  spareQty: string;
+  note?: string;
+}
+export interface AgreementResponsibility {
+  inspectionPass: string; // 検品合格後の扱い
+  marketDefect: string; // 市場不良時の扱い
+  compensation: string; // 補償の考え方
+}
+
+/** 顧客向け合意書ビュー（body_zhは転送用に含める。内部メモ系なし。customer_noteは本人の記入内容） */
+export interface AgreementClientView {
+  id: number;
+  publicId: string; // {ProjectID}-GS-{NN}
+  versionNo: number;
+  status: AgreementStatus;
+  approvedSampleDocId: number | null;
+  checkItems: AgreementCheckItem[];
+  limitSamples: AgreementLimitSample[];
+  tolerance: AgreementTolerance | null;
+  responsibility: AgreementResponsibility | null;
+  bodyZh: string | null;
+  customerNote: string | null;
+  customerDecidedAt: string | null;
+  createdAt: string;
+}
+export interface AgreementStaffView extends AgreementClientView {
+  projectId: number;
+  aiMode: AiMode;
+}
+// POST /admin/projects/:id/agreement
+export interface CreateAgreementResponse {
+  agreement: AgreementStaffView;
+  aiMode: AiMode;
+}
+// PATCH /admin/agreements/:id（DRAFTのみ）
+export interface PatchAgreementRequest {
+  checkItems?: AgreementCheckItem[];
+  limitSamples?: AgreementLimitSample[];
+  toleranceJson?: AgreementTolerance;
+  responsibilityJson?: AgreementResponsibility;
+  approvedSampleDocId?: number | null;
+}
+export interface PatchAgreementResponse {
+  ok: true;
+  agreement: AgreementStaffView;
+}
+// POST /admin/agreements/:id/vague-check
+export interface VagueFinding {
+  itemIndex: number;
+  phrase: string;
+  suggestion: string;
+}
+export interface VagueCheckResponse {
+  findings: VagueFinding[];
+  aiMode: AiMode;
+}
+// POST /admin/agreements/:id/send
+export interface SendAgreementResponse {
+  ok: true;
+  agreement: AgreementStaffView;
+  aiMode: AiMode;
+}
+// POST /agreements/:id/decide（CLIENT）
+export interface AgreementDecideRequest {
+  decision: 'APPROVE' | 'REQUEST_CHANGE';
+  note?: string;
+}
+export interface AgreementDecideResponse {
+  ok: true;
+  status: AgreementStatus;
+}
+
+// ---- リピート（顧客の自社案件一覧 + 相談の引き継ぎ） ----
+export interface ClientProjectListItem {
+  projectId: number;
+  publicId: string;
+  title: string;
+  status: string;
+  updatedAt: string | null;
+}
+export interface ClientProjectsResponse {
+  items: ClientProjectListItem[];
+}
+/** POST /consultations 拡張: entryRoute='REPEAT' 時に前回案件を指定可 */
+export interface ConsultationRequestV3 extends ConsultationRequest {
+  sourceProjectId?: number;
+}
+
+// ---- 顧客発行（POST /admin/clients） ----
+export interface CreateClientRequest {
+  companyName: string;
+  contactName: string;
+  email: string;
+  tempPassword: string;
+}
+export interface CreateClientResponse {
+  clientId: number;
+  publicId: string; // CL-{NNNN}
+}
+
+// ---- 価格方針（P-17） ----
+// PATCH /admin/proposals/:id/options（PENDING_APPROVAL中のみ）
+export interface ProposalOptionsPatchRequest {
+  options: { key: string; priceRangeJpy?: string }[];
+}
+export interface ProposalOptionsPatchResponse {
+  ok: true;
+  options: ProposalOptionView[];
+}
+// POST /admin/projects/:id/pricing-mode
+export interface PricingModeRequest {
+  hideInitialPrices: boolean;
+}
+export interface PricingModeResponse {
+  ok: true;
+  hideInitialPrices: boolean;
+}
+
+// ---- 既存ビューのBI-3拡張 ----
+/** 顧客向け: hideInitialPrices=true の案件では options[].priceRangeJpy が存在しない（UIは説明文を表示） */
+export interface ProjectViewClientV3 extends ProjectViewClientV2 {
+  /** 顧客が見られる最新の合意書（PENDING_CUSTOMER/AGREEDのみ）。無ければ null */
+  agreement: AgreementClientView | null;
+  /** 金額非表示モード（trueならproposal optionsに価格レンジが含まれない） */
+  hideInitialPrices: boolean;
+}
+export interface ProjectViewStaffV3 extends ProjectViewStaffV2 {
+  agreements: AgreementStaffView[];
+  documents: DocumentStaffView[];
+  hideInitialPrices: boolean;
+}
+
+// ---- 判断キュー拡張（合意書: 顧客回答待ち + 顧客修正希望着信） ----
+export interface AdminAgreementQueueItem {
+  agreementId: number;
+  agreementPublicId: string;
+  projectId: number;
+  publicId: string; // project public id
+  clientName: string;
+  title: string;
+  status: AgreementStatus;
+  customerNote: string | null;
+  customerDecidedAt: string | null;
+  createdAt: string;
+}
+export interface AdminQueueResponseV3 extends AdminQueueResponseV2 {
+  /** 顧客回答待ちの合意書（PENDING_CUSTOMER） */
+  agreementsPending: AdminAgreementQueueItem[];
+  /** 顧客のREQUEST_CHANGE着信（DRAFTに戻り customer_note あり・未再送） */
+  agreementChangeRequests: AdminAgreementQueueItem[];
 }

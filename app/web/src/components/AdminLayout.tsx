@@ -49,7 +49,7 @@ export function AdminLayout() {
         <div className="nav-foot">
           INTERNAL — 社内のみ
           <br />
-          Build Increment 2
+          Build Increment 3
         </div>
       </nav>
 

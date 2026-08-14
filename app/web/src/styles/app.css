@@ -162,8 +162,161 @@ header.site .head-row {
   outline: none;
 }
 
+/* ============================================================
+   BI-3（CONTRACT-3）: 実例テンプレ / 決めることマップ / 参考資料 / 量産合意書
+   ============================================================ */
+
+/* ---- 実例テンプレchips / 過去案件select ---- */
+.tpl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0 0;
+}
+.tpl-label {
+  font-size: 12.5px;
+  color: var(--faint);
+}
+.chip-tpl { font-size: 13px; }
+.past-select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  padding: 12px 14px;
+  font-size: 14.5px;
+  color: var(--ink);
+  font-family: var(--font-jp);
+}
+.past-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+
+/* ---- 決めることマップ（常設・横レール） ---- */
+.dmap { margin: 0 0 28px; padding: 14px 18px 6px; }
+.dmap-head {
+  font-size: 12.5px;
+  font-family: var(--font-jp);
+  font-weight: 600;
+  color: var(--sub);
+  letter-spacing: 0.04em;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.dmap-hint { font-size: 11px; font-weight: 400; color: var(--faint); }
+.dmap-rail {
+  display: flex;
+  align-items: flex-start;
+  overflow-x: auto;              /* モバイル: 横スクロール */
+  padding: 14px 2px 10px;
+  -webkit-overflow-scrolling: touch;
+}
+.dmap-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 72px;
+  position: relative;
+  flex: 1;
+}
+.dmap-step::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: -50%;
+  width: 100%;
+  height: 2px;
+  background: var(--border);
+}
+.dmap-step:first-child::before { display: none; }
+.dmap-step.done::before,
+.dmap-step.now::before { background: var(--accent); }
+.dmap-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  position: relative;
+  z-index: 1;
+  flex: none;
+}
+.dmap-step.done .dmap-dot { background: var(--accent); border-color: var(--accent); }
+.dmap-step.now .dmap-dot {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.dmap-step .tt {
+  font-size: 11.5px;
+  color: var(--faint);
+  margin-top: 6px;
+  white-space: nowrap;
+}
+.dmap-step.done .tt { color: var(--sub); }
+.dmap-step.now .tt { color: var(--accent-deep); font-weight: 600; }
+
+/* ---- 金額非表示モード（hide_initial_prices） ---- */
+.plan-price-hidden {
+  margin: 16px 0;
+  font-size: 13px;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 12px 14px;
+  line-height: 1.7;
+}
+
+/* ---- 量産合意書（顧客ビュー） ---- */
+.agr-card { margin-top: 18px; padding: 22px 24px; }
+.agr-card h3 {
+  font-size: 14.5px;
+  font-family: var(--font-jp);
+  margin-bottom: 12px;
+}
+.agr-photo {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  display: block;
+}
+.agr-checks {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 14px;
+}
+.agr-checks li strong { display: block; }
+.agr-checks .crit { display: block; color: var(--sub); line-height: 1.7; }
+.agr-checks .method { display: block; font-size: 12px; color: var(--faint); margin-top: 2px; }
+.agr-limits { display: flex; flex-wrap: wrap; gap: 16px; }
+.agr-limit { width: 190px; margin: 0; }
+.agr-limit img {
+  width: 100%;
+  height: 126px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  margin-top: 8px;
+  display: block;
+}
+.agr-limit figcaption {
+  font-size: 12px;
+  color: var(--sub);
+  margin-top: 6px;
+  line-height: 1.6;
+}
+
 @media (max-width: 480px) {
   .login-card { padding: 28px 22px; }
   .pending-card { padding: 30px 22px; flex-direction: column; }
   .queue-item { flex-wrap: wrap; }
+  .agr-limit { width: 44%; }
 }

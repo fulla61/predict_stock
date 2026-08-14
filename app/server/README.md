@@ -155,3 +155,80 @@ commercial_loops({ProjectID}-LOOP-{NN}), loop_options（based_on_quote_id / inte
 | 回帰 | Increment 1フロー（相談→理解カード→質問回答→提案生成→STAFF承認→顧客3案表示→選択）7項目すべて回帰なし | OK |
 | 遮断 | CLIENT→/admin/* は403 / 他社・不存在loopのdecideは404 | OK |
 | 型 | `npm run check`（tsc --noEmit）エラーゼロ | OK |
+
+---
+
+# Build Increment 3（CONTRACT-3）追記
+
+## DB追加（1表追加 → 計27表 + 非破壊ALTER）
+
+- 新表 `production_agreements`（量産合意書=G-02。public_id `{ProjectID}-GS-{NN}`・version_no・status `DRAFT/PENDING_CUSTOMER/AGREED/SUPERSEDED`・check_items_json・limit_samples_json・tolerance_json・responsibility_json・body_zh・customer_note）
+- `documents` へ ALTER 追加: `file_name / mime_type / size_bytes / storage_path / uploaded_by_user_id / visibility(DEFAULT 'CLIENT_VISIBLE') / source`（doc_type='UPLOAD' を流用）
+- `projects` へ ALTER 追加: `hide_initial_prices INTEGER NOT NULL DEFAULT 0`
+- settings seed 追加: `market_price_bias = 1.2`（初回3案の高め係数・CONFIGURABLE）
+
+## ファイルアップロード
+
+- 依存追加: `multer`（+ `@types/multer`）
+- 実体: `DATA_DIR/uploads/{projectId}/{docId}_{安全化ファイル名}`（`config.dbPath` のディレクトリ基準 → 本番は永続ディスクに載る）
+- **静的配信は一切しない**。取得は必ず `GET /api/documents/:id/file`（認証+テナント確認。CLIENTはCLIENT_VISIBLEのみ・INTERNAL/他社は404）
+- 上限15MB（超過は413）。MIME allowlist: png/jpg/jpeg/webp/gif/pdf/xlsx/xls/csv/docx/doc/zip（拡張子allowlist + MIME一致検証。`.sh`等は400）
+- ファイル名は拡張子を保持したまま危険文字を `_` に置換（パス区切り・制御文字除去）
+
+## API追加（15項目。★=STAFF / ☆=CLIENT / ◆=両Role）
+
+| # | エンドポイント | 内容 |
+|---|---|---|
+| 1◆ | `POST /projects/:id/documents` | multipart {file, title?, visibility?, source?}。CLIENTは強制 CLIENT_VISIBLE/CLIENT（INTERNAL指定しても無視）。STAFF既定はINTERNAL |
+| 2◆ | `GET /projects/:id/documents` | CLIENTはCLIENT_VISIBLEのみ。レスポンスに storage_path/内部ユーザー情報なし（ロールラベルのみ） |
+| 3◆ | `GET /documents/:id/file` | テナント確認後にContent-Dispositionでファイル返却 |
+| 4★ | `POST /admin/projects/:id/note` | 30秒記録 → timeline NOTE + audit |
+| 5★ | `POST /admin/projects/:id/agreement` | AIが仕様からチェック項目3〜7件（測れる文・日中）+許容条件を下書き → DRAFT作成（mockフォールバック対応） |
+| 6★ | `PATCH /admin/agreements/:id` | DRAFTのみ。checkItems/limitSamples（案件内docのみ参照可）/tolerance/responsibility/approvedSampleDocId |
+| 7★ | `POST /admin/agreements/:id/vague-check` | 曖昧語（綺麗・しっかり・ちゃんと・高品質・問題ない・丈夫 等）検出+書き直し案（mockは正規表現辞書） |
+| 8★ | `POST /admin/agreements/:id/send` | body_zh（质检标准: 编号/检验项目表/限度样品/允收标准AQL/责任划分）生成 → PENDING_CUSTOMER。**顧客名・JPY価格・マージン混入禁止（コンテキストに渡さない設計）** |
+| 9★ | `GET /admin/agreements/:id/export.md` | 日中併記md（WeChat転送用。顧客名・価格なし） |
+| 10☆ | `GET /projects/:id`（拡張）/ `POST /agreements/:id/decide` | client viewに `agreement`（PENDING_CUSTOMER/AGREEDのみ・body_zh含む）同梱 / APPROVE→AGREED・REQUEST_CHANGE→DRAFT+customer_note保存→社内キュー着信 |
+| 11☆ | `GET /projects` | 自社案件一覧（リピート入口の選択用） |
+| 12☆ | `POST /consultations`（拡張） | `sourceProjectId?`（REPEATのみ・自社のみ）。spec_fields（status→PROVISIONAL・「引き継ぎ元」項目で出所明示）/project_dna/project_attributesをコピーし、質問は差分のみ≤2 |
+| 13★ | `POST /admin/clients` | client(CL採番)+CLIENT user作成（bcrypt）。メール重複は409 |
+| 14 | 初回3案の価格 | mock/liveともレンジへ `market_price_bias` を乗算（live promptにも高め側指示）。`hide_initial_prices=1` の案件はCLIENTレスポンスから `priceRangeJpy` キー自体を除外 |
+| 15★ | `PATCH /admin/proposals/:id/options` / `POST /admin/projects/:id/pricing-mode` | PENDING_APPROVAL中の価格レンジ編集 / 金額非表示モード切替 |
+
+- `GET /admin/queue` を拡張: `agreementsPending`（顧客回答待ち）/ `agreementChangeRequests`（顧客修正希望着信）を追加（既存キーは不変）
+- `GET /projects/:id` STAFF viewに `agreements` / `documents` / `hideInitialPrices` を追加
+
+## 遮断（BI-3分）
+
+- 顧客向けdocumentは `toDocumentClientView()` 経由のみ: **storage_path・uploaded_by_user_id・visibility・氏名を含めない**（ロールラベルのみ）。INTERNAL資料は一覧にもファイルAPIにも存在しない扱い（404）
+- 合意書の中文生成・export.mdは **顧客企業名・JPY販売価格・マージンをコンテキストに渡さない**（プロンプト制約も併用）
+- `customer_note` は記入した本人（当該client）とSTAFFのみ到達可能な経路でのみ返却
+- 金額非表示モード時はCLIENT向け提案JSONに価格キーが存在しない（`toOptionView(rows, hidePrices)`）
+
+## audit / timeline 追加
+
+audit: `doc_upload / note_add / agreement_create / agreement_edit / agreement_send / agreement_decide / client_create / proposal_options_edit / pricing_mode_change`
+timeline: `DOC_UPLOADED / NOTE / AGREEMENT_DRAFTED / AGREEMENT_SENT / AGREEMENT_AGREED / AGREEMENT_CHANGE_REQUESTED / PROPOSAL_PRICE_EDITED / PRICING_MODE_CHANGED`
+
+## 検証結果（2026-08-14 実施・DB初期化→実起動+curl。ANTHROPIC_API_KEY未設定=mockフォールバック経路）
+
+| # | 確認項目 | 結果 |
+|---|---|---|
+| 1 | CLIENT画像添付→STAFFが閲覧可 / STAFFのINTERNAL資料がCLIENTの一覧・APIに現れない（`INTERNAL`/`storage_path` 文字列の混入ゼロをアサート） | OK |
+| 2 | CLIENTはINTERNALファイル取得404 / 他社CLIENTは他社ファイル・案件・合意書すべて404 / 未認証401 | OK |
+| 3 | `.sh` アップロード400（allowlist外）/ MIME・拡張子不一致400 / 15MBちょうど200・15MB+1は413 | OK |
+| 4 | CLIENTがvisibility=INTERNALを指定しても強制CLIENT_VISIBLE | OK |
+| 5 | 合意書AI下書き（GS採番・チェック項目6件・日中・許容条件）→曖昧語チェックが「綺麗」「しっかり」を指摘（書き直し案付き）→修正後は指摘0件 | OK |
+| 6 | 限度見本（OK/NG・案件内docのみ）・許容・責任分界・承認サンプル設定→送信でbody_zh生成（质检标准/限度样品/责任划分を含み、顧客名・¥・円・マージンを含まない）→PENDING_CUSTOMER | OK |
+| 7 | CLIENT: REQUEST_CHANGE→DRAFTへ戻りqueueの`agreementChangeRequests`に要望文付き着信→再送→APPROVE→AGREED（G-02成立・timeline記録）。AGREED後のPATCH/再decideは409 | OK |
+| 8 | export.mdに中文が含まれ顧客名・価格なし | OK |
+| 9 | REPEAT: `GET /projects`で前回案件選択→spec_fields引き継ぎ（PROVISIONAL・「引き継ぎ元 CI-xxxx」項目）+DNA/属性コピー→質問は差分のみ1問（qty再質問なし）。IDEA+sourceProjectIdは400・他社sourceは404 | OK |
+| 10 | 初回3案に market_price_bias 1.2 が乗算（¥980〜1,180 → ¥1,180〜1,420 等） | OK |
+| 11 | STAFFがPENDING中に価格レンジ編集→承認→CLIENTに編集後の数字表示 | OK |
+| 12 | 金額非表示モード: CLIENT JSONから`priceRangeJpy`キー自体が消える（3案は表示・`hideInitialPrices:true`）。STAFFは引き続き価格閲覧可。OFFに戻すと再表示 | OK |
+| 13 | お客様追加（CL-0002採番）→新規CLIENTでログイン成功。メール重複409 | OK |
+| 14 | audit（doc_upload〜pricing_mode_change 9種）/ timeline（DOC_UPLOADED〜PRICING_MODE_CHANGED 8種）追記を確認 | OK |
+| 15 | 回帰: BI-1相談→理解→回答→提案→承認→選択 / BI-2 RFQ→送信済み→見積2社→Loop分析→承認→CLIENT表示（工場名・internalNoteなし）→ACCEPT すべて動作 | OK |
+| 16 | `npm run check`（tsc --noEmit）エラーゼロ | OK |
+
+ファイル実体は `data/uploads/{projectId}/{docId}_{ファイル名}` に保存されることを確認（本番はDATA_DIR配下）。

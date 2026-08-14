@@ -1,6 +1,14 @@
 // CLIENT向けレスポンス整形（遮断: 内部フィールドを含めない）
 // CLIENTへ返すJSONは必ずこのファイルの toClientView 系関数を経由すること。
 import type {
+  AgreementCheckItem,
+  AgreementClientView,
+  AgreementLimitSample,
+  AgreementResponsibility,
+  AgreementStaffView,
+  AgreementTolerance,
+  DocumentStaffView,
+  DocumentView,
   FactoryView,
   LoopClientView,
   LoopOptionClientView,
@@ -18,6 +26,8 @@ import type { ProposalRow, ProposalOptionRow } from './repo/proposals.js';
 import type { FactoryRow } from './repo/factories.js';
 import type { LoopOptionRow, LoopRow } from './repo/loops.js';
 import type { QuoteConditionRow, QuoteRow, RfqRow } from './repo/rfqs.js';
+import type { DocumentWithUploader } from './repo/documents.js';
+import type { AgreementRow } from './repo/agreements.js';
 
 export function toUnderstandingView(rows: SpecFieldRow[]): UnderstandingField[] {
   return rows.map((r) => ({
@@ -40,13 +50,15 @@ export function toQuestionView(rows: QuestionRow[]): QuestionView[] {
   }));
 }
 
-export function toOptionView(rows: ProposalOptionRow[]): ProposalOptionView[] {
+// BI-3: hidePrices=true（projects.hide_initial_prices=1）のCLIENT向けでは
+// priceRangeJpy をレスポンスから完全に除外する（金額非表示モード）。
+export function toOptionView(rows: ProposalOptionRow[], hidePrices = false): ProposalOptionView[] {
   return rows.map((o) => ({
     id: o.id,
     key: o.option_key,
     title: o.title,
     concept: o.concept,
-    priceRangeJpy: o.price_range_jpy,
+    ...(hidePrices ? {} : { priceRangeJpy: o.price_range_jpy }),
     qtyFrom: o.qty_from,
     leadDays: o.lead_days,
     pros: JSON.parse(o.pros_json) as string[],
@@ -56,8 +68,12 @@ export function toOptionView(rows: ProposalOptionRow[]): ProposalOptionView[] {
   }));
 }
 
-export function toProposalView(row: ProposalRow, options: ProposalOptionRow[]): ProposalView {
-  const opts = toOptionView(options);
+export function toProposalView(
+  row: ProposalRow,
+  options: ProposalOptionRow[],
+  hidePrices = false
+): ProposalView {
+  const opts = toOptionView(options, hidePrices);
   const selected = opts.find((o) => o.selected);
   return {
     id: row.id,
@@ -185,5 +201,72 @@ export function toQuoteView(
       note: c.note ?? undefined,
     })),
     createdAt: row.created_at,
+  };
+}
+
+// ============================================================
+// BI-3（CONTRACT-3）
+// ============================================================
+
+// 【遮断】顧客向け資料ビュー。storage_path・uploaded_by_user_id・visibility は絶対に含めない。
+// アップロード者はロールラベルのみ。CLIENTへdocumentを返す経路は必ずこの関数を通すこと。
+export function toDocumentClientView(row: DocumentWithUploader): DocumentView {
+  return {
+    id: row.id,
+    publicId: row.public_id,
+    title: row.title,
+    fileName: row.file_name ?? '',
+    mimeType: row.mime_type ?? 'application/octet-stream',
+    sizeBytes: row.size_bytes ?? 0,
+    uploadedByRole: row.uploaded_by_role ?? 'STAFF',
+    source: row.source ?? 'STAFF',
+    createdAt: row.created_at,
+  };
+}
+
+// STAFF向け（visibility・氏名つき。storage_pathはAPIへ出さない）
+export function toDocumentStaffView(row: DocumentWithUploader): DocumentStaffView {
+  return {
+    ...toDocumentClientView(row),
+    projectId: row.project_id,
+    visibility: row.visibility,
+    uploadedByName: row.uploaded_by_name,
+  };
+}
+
+function parseJsonOr<T>(json: string | null, fallback: T): T {
+  if (!json) return fallback;
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+// 顧客向け合意書ビュー。body_zh は工場転送用に含める。
+// customer_note は記入した本人（当該client）とSTAFFのみが到達できる経路で使うこと。
+export function toAgreementClientView(row: AgreementRow): AgreementClientView {
+  return {
+    id: row.id,
+    publicId: row.public_id,
+    versionNo: row.version_no,
+    status: row.status,
+    approvedSampleDocId: row.approved_sample_doc_id,
+    checkItems: parseJsonOr<AgreementCheckItem[]>(row.check_items_json, []),
+    limitSamples: parseJsonOr<AgreementLimitSample[]>(row.limit_samples_json, []),
+    tolerance: parseJsonOr<AgreementTolerance | null>(row.tolerance_json, null),
+    responsibility: parseJsonOr<AgreementResponsibility | null>(row.responsibility_json, null),
+    bodyZh: row.body_zh,
+    customerNote: row.customer_note,
+    customerDecidedAt: row.customer_decided_at,
+    createdAt: row.created_at,
+  };
+}
+
+export function toAgreementStaffView(row: AgreementRow): AgreementStaffView {
+  return {
+    ...toAgreementClientView(row),
+    projectId: row.project_id,
+    aiMode: row.ai_mode ?? 'mock',
   };
 }

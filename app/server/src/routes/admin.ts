@@ -5,6 +5,7 @@ import {
   getProjectForStaff,
   getLatestRequirement,
   listSpecFields,
+  setProjectHideInitialPrices,
   updateProjectStatus,
 } from '../repo/projects.js';
 import {
@@ -12,22 +13,51 @@ import {
   getProposalById,
   listOptions,
   listPendingProposals,
+  updateProposalOptionPrice,
   updateProposalStatus,
 } from '../repo/proposals.js';
 import { audit, timeline, appendApproval } from '../repo/audit.js';
 import { generateProposalsForProject } from '../services/consultation.js';
 import { listLoopOptions, listModifyRequests, listPendingLoops } from '../repo/loops.js';
+import {
+  listChangeRequestedAgreements,
+  listPendingCustomerAgreements,
+} from '../repo/agreements.js';
 import { toLoopOptionStaffView, toOptionView, toUnderstandingView } from '../views.js';
-import type { AdminActionResponse, AdminQueueResponseV2 } from '../../../shared/api-types.js';
+import type {
+  AdminActionResponse,
+  AdminAgreementQueueItem,
+  AdminQueueResponseV3,
+  PricingModeResponse,
+  ProposalOptionsPatchResponse,
+} from '../../../shared/api-types.js';
 
 export const adminRouter = Router();
 
 const NOT_FOUND = { error: { code: 'NOT_FOUND', message: '提案が見つかりません' } };
 
+// BI-3: 合意書キュー行の整形（顧客回答待ち / 顧客修正希望）
+function toAgreementQueueItem(
+  a: ReturnType<typeof listPendingCustomerAgreements>[number]
+): AdminAgreementQueueItem {
+  return {
+    agreementId: a.id,
+    agreementPublicId: a.public_id,
+    projectId: a.project_id,
+    publicId: a.project_public_id,
+    clientName: a.client_name,
+    title: a.title,
+    status: a.status,
+    customerNote: a.customer_note,
+    customerDecidedAt: a.customer_decided_at,
+    createdAt: a.created_at,
+  };
+}
+
 // ---- GET /api/admin/queue ----
 adminRouter.get('/admin/queue', requireAuth, requireStaff, (_req, res) => {
   const rows = listPendingProposals();
-  const body: AdminQueueResponseV2 = {
+  const body: AdminQueueResponseV3 = {
     items: rows.map((pr) => {
       const requirement = getLatestRequirement(pr.project_id);
       return {
@@ -66,7 +96,116 @@ adminRouter.get('/admin/queue', requireAuth, requireStaff, (_req, res) => {
       modifyNote: l.modify_note,
       decidedAt: l.decided_at,
     })),
+    // BI-3: 量産合意書（顧客回答待ち + 顧客修正希望着信）
+    agreementsPending: listPendingCustomerAgreements().map(toAgreementQueueItem),
+    agreementChangeRequests: listChangeRequestedAgreements().map(toAgreementQueueItem),
   };
+  res.json(body);
+});
+
+// ---- PATCH /api/admin/proposals/:id/options（BI-3: PENDING_APPROVAL中の価格レンジ編集）----
+const optionsPatchSchema = z.object({
+  options: z
+    .array(
+      z.object({
+        key: z.string().min(1).max(20),
+        priceRangeJpy: z.string().min(1).max(200).optional(),
+      })
+    )
+    .min(1)
+    .max(3),
+});
+
+adminRouter.patch('/admin/proposals/:id/options', requireAuth, requireStaff, (req, res) => {
+  const proposalId = Number(req.params.id);
+  const proposal = Number.isInteger(proposalId) ? getProposalById(proposalId) : undefined;
+  if (!proposal) return void res.status(404).json(NOT_FOUND);
+  if (proposal.status !== 'PENDING_APPROVAL') {
+    return void res
+      .status(409)
+      .json({ error: { code: 'INVALID_STATE', message: '承認待ちの提案のみ編集できます' } });
+  }
+  const parsed = optionsPatchSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return void res
+      .status(400)
+      .json({ error: { code: 'INVALID_INPUT', message: 'Optionの形式が正しくありません' } });
+  }
+  const existingKeys = new Set(listOptions(proposal.id).map((o) => o.option_key));
+  for (const o of parsed.data.options) {
+    if (!existingKeys.has(o.key)) {
+      return void res
+        .status(400)
+        .json({ error: { code: 'INVALID_INPUT', message: `Option「${o.key}」が存在しません` } });
+    }
+  }
+  const user = req.user!;
+  const before = toOptionView(listOptions(proposal.id));
+  for (const o of parsed.data.options) {
+    if (o.priceRangeJpy !== undefined) {
+      updateProposalOptionPrice(proposal.id, o.key, o.priceRangeJpy);
+    }
+  }
+  const after = toOptionView(listOptions(proposal.id));
+  audit({
+    actorUserId: user.id,
+    actorRole: user.role,
+    action: 'proposal_options_edit',
+    entityType: 'proposals',
+    entityId: proposal.id,
+    before: { options: before.map((o) => ({ key: o.key, priceRangeJpy: o.priceRangeJpy })) },
+    after: { options: after.map((o) => ({ key: o.key, priceRangeJpy: o.priceRangeJpy })) },
+  });
+  timeline({
+    projectId: proposal.project_id,
+    eventType: 'PROPOSAL_PRICE_EDITED',
+    summaryJa: '担当者が提案の価格レンジを調整しました',
+    actorUserId: user.id,
+    refTable: 'proposals',
+    refId: proposal.id,
+  });
+  const body: ProposalOptionsPatchResponse = { ok: true, options: after };
+  res.json(body);
+});
+
+// ---- POST /api/admin/projects/:id/pricing-mode（BI-3: 案件単位の金額非表示モード）----
+const pricingModeSchema = z.object({ hideInitialPrices: z.boolean() });
+
+adminRouter.post('/admin/projects/:id/pricing-mode', requireAuth, requireStaff, (req, res) => {
+  const projectId = Number(req.params.id);
+  const project = Number.isInteger(projectId) ? getProjectForStaff(projectId) : undefined;
+  if (!project) {
+    return void res
+      .status(404)
+      .json({ error: { code: 'NOT_FOUND', message: '案件が見つかりません' } });
+  }
+  const parsed = pricingModeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return void res
+      .status(400)
+      .json({ error: { code: 'INVALID_INPUT', message: 'hideInitialPrices を指定してください' } });
+  }
+  const user = req.user!;
+  const before = project.hide_initial_prices === 1;
+  setProjectHideInitialPrices(project.id, parsed.data.hideInitialPrices);
+  audit({
+    actorUserId: user.id,
+    actorRole: user.role,
+    action: 'pricing_mode_change',
+    entityType: 'projects',
+    entityId: project.id,
+    before: { hideInitialPrices: before },
+    after: { hideInitialPrices: parsed.data.hideInitialPrices },
+  });
+  timeline({
+    projectId: project.id,
+    eventType: 'PRICING_MODE_CHANGED',
+    summaryJa: parsed.data.hideInitialPrices
+      ? '概算金額は工場確認後にご提示する方針に変更しました'
+      : '概算金額を表示する方針に変更しました',
+    actorUserId: user.id,
+  });
+  const body: PricingModeResponse = { ok: true, hideInitialPrices: parsed.data.hideInitialPrices };
   res.json(body);
 });
 

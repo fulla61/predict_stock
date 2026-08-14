@@ -453,6 +453,108 @@ footer.admin-foot {
 .loop-modify-box h3 { font-size: 15px; font-family: var(--font-jp); margin-bottom: 6px; }
 .loop-modify-box .sub { font-size: 13px; color: var(--sub); margin-bottom: 12px; }
 
+/* ============ BI-3（CONTRACT-3） ============ */
+
+/* ---- 資料（documents） ---- */
+.doc-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.doc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.doc-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--ice), var(--accent-soft));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  flex: none;
+}
+.doc-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.doc-main { flex: 1; min-width: 0; }
+.doc-name {
+  display: block;
+  font-weight: 600;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-meta { display: block; font-size: 11.5px; color: var(--faint); }
+
+/* ---- 量産合意書: チェック項目テーブル / 曖昧語 / 限度見本 ---- */
+.chk-table-wrap { overflow-x: auto; margin-top: 8px; }
+.chk-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.chk-table th {
+  text-align: left;
+  font-size: 11px;
+  color: var(--faint);
+  font-weight: 600;
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.chk-table td {
+  padding: 8px 8px 8px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  min-width: 90px;
+}
+.chk-table td:first-child { min-width: 24px; color: var(--faint); }
+.chk-table tr:last-child td { border-bottom: none; }
+.vague-box {
+  margin: 2px 0 4px;
+  background: var(--warn-soft);
+  border: 1px solid rgba(196, 134, 58, 0.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+.vague-box .vague-suggest { color: var(--ink); margin-top: 2px; }
+.limit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+.limit-row img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  flex: none;
+}
+
+/* ---- 価格編集・金額非表示トグル ---- */
+.hide-price-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  margin-top: 16px;
+  line-height: 1.7;
+  cursor: pointer;
+}
+.hide-price-toggle input { transform: translateY(3px); }
+
+/* ---- 顧客発行: 仮パスワード表示 ---- */
+.pw-box { border: 1px solid rgba(196, 134, 58, 0.45); margin-bottom: 16px; }
+.pw-value { font-size: 16px; font-weight: 700; letter-spacing: 0.06em; }
+
 /* ============ レスポンシブ ============ */
 @media (max-width: 860px) {
   .memo-grid { grid-template-columns: 1fr; }

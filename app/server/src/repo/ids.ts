@@ -37,8 +37,11 @@ export function nextFactoryPublicId(): string {
   return `FA-${String(n).padStart(4, '0')}`;
 }
 
-// {ProjectID}-RFQ-{NN} / -QT-{NN} / -LOOP-{NN}（project単位で採番・再利用禁止）
-function nextProjectScopedId(projectPublicId: string, typeCode: 'RFQ' | 'QT' | 'LOOP'): string {
+// {ProjectID}-RFQ-{NN} / -QT-{NN} / -LOOP-{NN} / -DOC-{NN} / -GS-{NN}（project単位で採番・再利用禁止）
+function nextProjectScopedId(
+  projectPublicId: string,
+  typeCode: 'RFQ' | 'QT' | 'LOOP' | 'DOC' | 'GS'
+): string {
   const n = bump('PROJECT', projectPublicId, typeCode);
   return `${projectPublicId}-${typeCode}-${String(n).padStart(2, '0')}`;
 }
@@ -51,4 +54,13 @@ export function nextQuotePublicId(projectPublicId: string): string {
 }
 export function nextLoopPublicId(projectPublicId: string): string {
   return nextProjectScopedId(projectPublicId, 'LOOP');
+}
+
+// ---- BI-3 ----
+
+export function nextDocumentPublicId(projectPublicId: string): string {
+  return nextProjectScopedId(projectPublicId, 'DOC');
+}
+export function nextAgreementPublicId(projectPublicId: string): string {
+  return nextProjectScopedId(projectPublicId, 'GS');
 }

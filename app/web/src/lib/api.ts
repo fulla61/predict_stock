@@ -23,10 +23,13 @@ export class NetworkError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  // multipart（FormData）はブラウザに boundary 付き Content-Type を任せる
+  const isForm = typeof FormData !== 'undefined' && init?.body instanceof FormData;
   try {
     res = await fetch(`/api${path}`, {
       credentials: 'same-origin',
-      headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+      headers:
+        init?.body && !isForm ? { 'Content-Type': 'application/json' } : undefined,
       ...init,
     });
   } catch {
@@ -66,6 +69,13 @@ export const api = {
     return request<T>(path, {
       method: 'PATCH',
       body: JSON.stringify(body),
+    });
+  },
+  /** multipart/form-data 送信（BI-3: ファイルアップロード用） */
+  postForm<T>(path: string, form: FormData): Promise<T> {
+    return request<T>(path, {
+      method: 'POST',
+      body: form,
     });
   },
 };

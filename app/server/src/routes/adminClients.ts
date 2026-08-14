@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
 import { requireAuth, requireStaff } from '../middleware/auth.js';
 import {
+  createClientWithUserTx,
+  emailExists,
   getClient,
   getClientExperienceAuto,
   getClientProjectStats,
@@ -12,11 +15,13 @@ import {
   parseClientSettings,
   updateClientSettings,
 } from '../repo/clients.js';
+import { nextClientPublicId } from '../repo/ids.js';
 import { audit } from '../repo/audit.js';
 import type {
   AdminClientDetailResponse,
   AdminClientsResponse,
   ClientSettingsPatchResponse,
+  CreateClientResponse,
 } from '../../../shared/api-types.js';
 
 export const adminClientsRouter = Router();
@@ -52,6 +57,52 @@ adminClientsRouter.get('/admin/clients', requireAuth, requireStaff, (_req, res) 
       at: a.created_at,
     })),
   };
+  res.json(body);
+});
+
+// ---- POST /api/admin/clients（BI-3: お客様アカウント発行。client+CLIENT userを同時作成）----
+const createClientSchema = z.object({
+  companyName: z.string().min(1).max(120),
+  contactName: z.string().min(1).max(60),
+  email: z.string().email().max(200),
+  tempPassword: z.string().min(8).max(100),
+});
+
+adminClientsRouter.post('/admin/clients', requireAuth, requireStaff, async (req, res) => {
+  const parsed = createClientSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return void res.status(400).json({
+      error: {
+        code: 'INVALID_INPUT',
+        message: '会社名・担当者名・メールアドレス・仮パスワード（8文字以上）を入力してください',
+      },
+    });
+  }
+  const email = parsed.data.email.trim().toLowerCase();
+  if (emailExists(email)) {
+    return void res.status(409).json({
+      error: { code: 'EMAIL_EXISTS', message: 'このメールアドレスはすでに登録されています' },
+    });
+  }
+  const passwordHash = await bcrypt.hash(parsed.data.tempPassword, 10);
+  const publicId = nextClientPublicId();
+  const { clientId, userId } = createClientWithUserTx({
+    publicId,
+    companyName: parsed.data.companyName.trim(),
+    contactName: parsed.data.contactName.trim(),
+    email,
+    passwordHash,
+  });
+  const user = req.user!;
+  audit({
+    actorUserId: user.id,
+    actorRole: user.role,
+    action: 'client_create',
+    entityType: 'clients',
+    entityId: clientId,
+    after: { publicId, companyName: parsed.data.companyName.trim(), userId, email },
+  });
+  const body: CreateClientResponse = { clientId, publicId };
   res.json(body);
 });
 

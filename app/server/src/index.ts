@@ -13,6 +13,8 @@ import { adminClientsRouter } from './routes/adminClients.js';
 import { factoriesRouter } from './routes/factories.js';
 import { rfqsRouter } from './routes/rfqs.js';
 import { loopsRouter } from './routes/loops.js';
+import { documentsRouter } from './routes/documents.js';
+import { agreementsRouter } from './routes/agreements.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -33,6 +35,9 @@ app.use('/api', adminClientsRouter);
 app.use('/api', factoriesRouter);
 app.use('/api', rfqsRouter);
 app.use('/api', loopsRouter);
+// BI-3: ファイルは静的配信せず、必ず認証+テナント確認付きAPI経由（documentsRouter）
+app.use('/api', documentsRouter);
+app.use('/api', agreementsRouter);
 
 // web/dist があれば静的配信（無くてもAPIは動く）
 if (fs.existsSync(config.webDist)) {

@@ -340,3 +340,31 @@ CREATE TABLE IF NOT EXISTS loop_options (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (loop_id, option_key)
 );
+
+-- ============================================================
+-- BI-3 追加（CONTRACT-3 §1: 1表追加 → 計27表）
+-- documents への file_name/mime_type/size_bytes/storage_path/uploaded_by_user_id/visibility/source 列、
+-- projects への hide_initial_prices 列は db.ts の migrate() で ALTER TABLE 追加（非破壊）
+-- ============================================================
+
+-- 27. production_agreements（量産合意書 = G-02。public_id: {ProjectID}-GS-{NN}）
+CREATE TABLE IF NOT EXISTS production_agreements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  public_id TEXT NOT NULL UNIQUE,             -- {ProjectID}-GS-{NN}
+  version_no INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'DRAFT'
+    CHECK (status IN ('DRAFT','PENDING_CUSTOMER','AGREED','SUPERSEDED')),
+  approved_sample_doc_id INTEGER REFERENCES documents(id),
+  check_items_json TEXT NOT NULL DEFAULT '[]',    -- [{name, criteria_ja, criteria_zh, method}] 3〜7件
+  limit_samples_json TEXT NOT NULL DEFAULT '[]',  -- [{docId, label:'OK_LIMIT'|'NG', note}]
+  tolerance_json TEXT,                             -- {defectRatePct, spareQty, note}
+  responsibility_json TEXT,                        -- {inspectionPass, marketDefect, compensation}
+  body_zh TEXT,                                    -- 中文版（工場向け。顧客名・販売価格・マージン混入禁止）
+  customer_note TEXT,                              -- 顧客の修正希望（本人とSTAFFのみ閲覧）
+  customer_decided_at TEXT,
+  ai_mode TEXT CHECK (ai_mode IN ('live','mock')),
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_agreements_project ON production_agreements(project_id);
