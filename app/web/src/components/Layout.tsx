@@ -39,7 +39,7 @@ export function Layout() {
       <footer className="site">
         実際の提案は担当者確認のうえお送りします
         <br />
-        Crossimage Product OS Build Increment 1
+        Crossimage Product OS Build Increment 2
       </footer>
     </>
   );

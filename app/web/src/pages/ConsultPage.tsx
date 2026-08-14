@@ -15,7 +15,10 @@ import type {
   ConsultationResponse,
   EntryRoute,
   GenerateProposalsResponse,
-  ProjectViewClient,
+  LoopClientView,
+  LoopDecideResponse,
+  LoopOptionClientView,
+  ProjectViewClientV2,
   ProposalOptionView,
   QuestionView,
   SelectResponse,
@@ -29,7 +32,11 @@ type Step =
   | 'generating'
   | 'pending'
   | 'proposal'
-  | 'done';
+  | 'done'
+  /* ---- BI-2: 選べる進め方（商流Loop） ---- */
+  | 'loop'
+  | 'modify_pending'
+  | 'loop_done';
 
 const ENTRY_CHIPS: { route: EntryRoute; label: string; placeholder: string }[] = [
   {
@@ -120,6 +127,14 @@ export default function ConsultPage() {
   const [options, setOptions] = useState<ProposalOptionView[] | null>(null);
   const [chosen, setChosen] = useState<ProposalOptionView | null>(null);
   const [selecting, setSelecting] = useState(false);
+
+  /* ---- BI-2: 選べる進め方（商流Loop） ---- */
+  const [loop, setLoop] = useState<LoopClientView | null>(null);
+  const [loopChosen, setLoopChosen] = useState<LoopOptionClientView | null>(null);
+  const [modifyOpen, setModifyOpen] = useState(false);
+  const [modifyNote, setModifyNote] = useState('');
+  const [deciding, setDeciding] = useState(false);
+  const modifiedLoopId = useRef<number | null>(null);
 
   const canvasRef = useRef<HTMLTextAreaElement>(null);
   const submittedText = useRef('');
@@ -231,7 +246,7 @@ export default function ConsultPage() {
   const pollProject = useCallback(async () => {
     if (!projectId) return;
     try {
-      const pj = await api.get<ProjectViewClient>(`/projects/${projectId}`);
+      const pj = await api.get<ProjectViewClientV2>(`/projects/${projectId}`);
       if (pj.aiMode) setAiMode(pj.aiMode);
       if (pj.proposal.state === 'ready' && pj.proposal.proposal.options.length) {
         setOptions(pj.proposal.proposal.options);
@@ -250,6 +265,87 @@ export default function ConsultPage() {
     const t = window.setInterval(() => void pollProject(), 10_000);
     return () => window.clearInterval(t);
   }, [step, pollProject]);
+
+  /* ---------------- BI-2: 選べる進め方（承認済みLoop）の10sポーリング ---------------- */
+  const pollLoop = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const pj = await api.get<ProjectViewClientV2>(`/projects/${projectId}`);
+      if (pj.aiMode) setAiMode(pj.aiMode);
+      const lp = pj.loop;
+      if (
+        lp &&
+        lp.options.length &&
+        !lp.customerDecision &&
+        lp.id !== modifiedLoopId.current
+      ) {
+        setLoop(lp);
+        setModifyOpen(false);
+        setModifyNote('');
+        setStep('loop');
+        emitVisual('LOOP_READY'); // Presentation Layer 接続点
+      }
+    } catch {
+      /* 一時的な失敗は次のポーリングで再試行 */
+    }
+  }, [projectId, setAiMode]);
+
+  useEffect(() => {
+    if (step !== 'done' && step !== 'modify_pending') return;
+    void pollLoop();
+    const t = window.setInterval(() => void pollLoop(), 10_000);
+    return () => window.clearInterval(t);
+  }, [step, pollLoop]);
+
+  /* ---------------- BI-2: Loopの決定（ACCEPT / MODIFY） ---------------- */
+  async function acceptLoopOption(opt: LoopOptionClientView) {
+    if (!loop || deciding) return;
+    setDeciding(true);
+    try {
+      await api.post<LoopDecideResponse>(`/loops/${loop.id}/decide`, {
+        decision: 'ACCEPT',
+        selectedOptionKey: opt.key,
+      });
+      setLoopChosen(opt);
+      setStep('loop_done');
+      emitVisual('LOOP_ACCEPTED', { option: opt.key }); // Presentation Layer 接続点
+    } catch (e) {
+      toast(
+        e instanceof Error
+          ? e.message
+          : '選択を記録できませんでした。もう一度お試しください。',
+      );
+    } finally {
+      setDeciding(false);
+    }
+  }
+
+  async function sendModify() {
+    if (!loop || deciding) return;
+    const note = modifyNote.trim();
+    if (!note) {
+      toast('変えたい条件をご記入ください。');
+      return;
+    }
+    setDeciding(true);
+    try {
+      await api.post<LoopDecideResponse>(`/loops/${loop.id}/decide`, {
+        decision: 'MODIFY',
+        modifyNote: note,
+      });
+      modifiedLoopId.current = loop.id;
+      setLoop(null);
+      setStep('modify_pending');
+    } catch (e) {
+      toast(
+        e instanceof Error
+          ? e.message
+          : '送信できませんでした。時間をおいてもう一度お試しください。',
+      );
+    } finally {
+      setDeciding(false);
+    }
+  }
 
   /* ---------------- STEP 4 → 選択 ---------------- */
   async function selectOption(opt: ProposalOptionView) {
@@ -286,6 +382,11 @@ export default function ConsultPage() {
     setAnswers({});
     setOptions(null);
     setChosen(null);
+    setLoop(null);
+    setLoopChosen(null);
+    setModifyOpen(false);
+    setModifyNote('');
+    modifiedLoopId.current = null;
     emitVisual('CANVAS_OPEN'); // Presentation Layer 接続点
   }
 
@@ -657,6 +758,10 @@ export default function ConsultPage() {
               サンプルのご相談からご案内します。通常<span className="num">1〜2</span>
               営業日以内に担当者からご連絡します。
             </div>
+            <p className="note">
+              工場との条件確認が進むと、この画面に新しい進め方のご案内が表示されます。
+              このままお待ちいただいても、後で開き直していただいても大丈夫です。
+            </p>
           </div>
 
           <div className="card receipt">
@@ -694,6 +799,221 @@ export default function ConsultPage() {
             <button type="button" className="btn btn-ghost" onClick={() => setStep('proposal')}>
               提案に戻る
             </button>
+            <button type="button" className="btn btn-ghost" onClick={restart}>
+              新しい相談を始める
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* ---------- BI-2: 選べる進め方 ---------- */}
+      {step === 'loop' && loop && (
+        <section className="step enter" aria-labelledby="h-loop">
+          <h2 className="h-main" id="h-loop">
+            条件を調整して、
+            <br />
+            より合う進め方をご用意しました
+          </h2>
+          <p className="h-sub">
+            ご選択いただいた内容をもとに、担当者が工場と条件を確認しました。
+            どの案でも、このあと正式なお見積りとサンプルのご案内に進みます。
+          </p>
+          {publicId && (
+            <p className="note">
+              相談番号: <span className="num">{publicId}</span>
+            </p>
+          )}
+
+          <div className="plans">
+            {loop.options.map((opt) => (
+              <article
+                key={opt.key}
+                className={`card plan-card${opt.recommended ? ' recommended' : ''}`}
+              >
+                {opt.recommended && <span className="ribbon">おすすめ</span>}
+                <h3 className="plan-name">{opt.title}</h3>
+                <p className="plan-concept">{opt.concept}</p>
+                <div className="plan-price-row">
+                  <span className="price">
+                    {formatPrice(opt.customerPriceRange)}
+                    <span className="unit-label">／個</span>
+                  </span>
+                </div>
+                <p className="plan-price-note">
+                  <Tt
+                    term="概算"
+                    desc="工場との確認をふまえた目安金額です。数量とお届け先が確定した時点で正式なお見積りをお出しします。"
+                  />
+                  （工場との確認をふまえた目安）
+                </p>
+                <dl className="plan-meta">
+                  <div>
+                    <dt>
+                      <Tt
+                        term="数量目安"
+                        desc="品質と価格が両立しやすい最小の生産数量（MOQ）の目安です。"
+                      />
+                    </dt>
+                    <dd className="num">{formatQtyFrom(opt.qtyFrom)}</dd>
+                  </div>
+                  <div>
+                    <dt>お届け目安</dt>
+                    <dd className="num">{formatLeadDays(opt.leadDays)}</dd>
+                  </div>
+                </dl>
+                <ul className="plan-good">
+                  {opt.pros.map((g) => (
+                    <li key={g}>{g}</li>
+                  ))}
+                </ul>
+                <p className="plan-tradeoff">{opt.tradeoff}</p>
+                <div className="plan-cta">
+                  <button
+                    type="button"
+                    className={`btn ${opt.recommended ? 'btn-primary' : 'btn-ghost'}`}
+                    disabled={deciding}
+                    onClick={() => acceptLoopOption(opt)}
+                  >
+                    この案で進める
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="card loop-modify-box">
+            <h3>条件を変えたい</h3>
+            <p className="sub">
+              数量・価格・お届け時期など、気になる点をそのままの言葉でお書きください。
+              担当者が工場と再調整し、新しい進め方をご用意します。
+            </p>
+            {modifyOpen ? (
+              <>
+                <textarea
+                  className="textarea-input"
+                  value={modifyNote}
+                  onChange={(e) => setModifyNote(e.target.value)}
+                  placeholder="例）もう少し数量を減らして始めたい。500個くらいだとどうなりますか？"
+                  aria-label="変えたい条件"
+                />
+                <div className="step3-cta" style={{ marginTop: 18 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={sendModify}
+                    disabled={deciding}
+                  >
+                    {deciding ? '送信しています…' : 'この内容で相談する'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => setModifyOpen(false)}
+                    disabled={deciding}
+                  >
+                    やめる
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setModifyOpen(true)}
+              >
+                条件を変えたい
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ---------- BI-2: MODIFY送信後（再調整中） ---------- */}
+      {step === 'modify_pending' && (
+        <section className="step enter" aria-live="polite">
+          <h2 className="h-main" style={{ fontSize: 22 }}>
+            担当者が再調整しています
+          </h2>
+          <div className="pending-card card">
+            <span className="pending-icon" aria-hidden="true">
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v6l4 2" />
+              </svg>
+            </span>
+            <div>
+              <div className="pending-title">
+                お伺いした条件をもとに、担当者が工場と再調整しています。
+              </div>
+              <p className="pending-desc">
+                通常<span className="num">1〜2</span>
+                営業日以内に、新しい進め方をこの画面でご案内します。このままお待ちいただいても、後で開き直していただいても大丈夫です。
+              </p>
+              {publicId && (
+                <p className="note">
+                  相談番号: <span className="num">{publicId}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ---------- BI-2: Loop確定（完了） ---------- */}
+      {step === 'loop_done' && loopChosen && (
+        <section className="step enter" aria-labelledby="h-loop-done">
+          <div className="card done-hero">
+            <div className="done-check">
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            <h2 className="done-title" id="h-loop-done">
+              「{loopChosen.title}」で進めます。
+              <br />
+              担当者が正式なお見積りとサンプルのご案内を準備します。
+            </h2>
+            <div className="done-next">
+              <strong>次にやること</strong>
+              正式なお見積りとサンプルのご案内を、通常<span className="num">1〜2</span>
+              営業日以内に担当者からお送りします。
+            </div>
+          </div>
+
+          <div className="card receipt">
+            <h3>ご選択内容の控え</h3>
+            <div>
+              <ReceiptLine k="相談番号" v={publicId ?? '—'} />
+              <ReceiptLine k="選んだ進め方" v={`${loopChosen.title} — ${loopChosen.concept}`} />
+              <ReceiptLine
+                k="概算単価"
+                v={`${formatPrice(loopChosen.customerPriceRange)}（工場との確認をふまえた目安）`}
+              />
+              <ReceiptLine k="数量目安" v={formatQtyFrom(loopChosen.qtyFrom)} />
+              <ReceiptLine k="お届け目安" v={formatLeadDays(loopChosen.leadDays)} />
+            </div>
+          </div>
+
+          <div className="step3-cta">
             <button type="button" className="btn btn-ghost" onClick={restart}>
               新しい相談を始める
             </button>

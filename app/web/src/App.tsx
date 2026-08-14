@@ -2,9 +2,13 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import type { ReactNode } from 'react';
 import { AuthProvider, useAuth } from './lib/auth';
 import { Layout } from './components/Layout';
+import { AdminLayout } from './components/AdminLayout';
 import LoginPage from './pages/LoginPage';
 import ConsultPage from './pages/ConsultPage';
-import AdminPage from './pages/AdminPage';
+import AdminHomePage, { AdminClientsPage } from './pages/admin/AdminHomePage';
+import AdminClientPage from './pages/admin/AdminClientPage';
+import AdminProjectPage from './pages/admin/AdminProjectPage';
+import InsightsPage from './pages/admin/InsightsPage';
 
 /** 認証ガード: 未認証 → /login。roles 指定時は Role 不一致でリダイレクト。 */
 function RequireAuth({ children, staffOnly }: { children: ReactNode; staffOnly?: boolean }) {
@@ -33,7 +37,7 @@ function RequireAuth({ children, staffOnly }: { children: ReactNode; staffOnly?:
 
 function Home() {
   const { user } = useAuth();
-  // STAFF のホームは承認キュー
+  // STAFF のホームは管理コンソール
   if (user?.role === 'STAFF') return <Navigate to="/admin" replace />;
   return <ConsultPage />;
 }
@@ -53,16 +57,25 @@ export default function App() {
                 </RequireAuth>
               }
             />
-            <Route
-              path="/admin"
-              element={
-                <RequireAuth staffOnly>
-                  <AdminPage />
-                </RequireAuth>
-              }
-            />
-            <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
+
+          {/* 管理コンソール（左ナビ型・CONTRACT-2 §3） */}
+          <Route
+            path="/admin"
+            element={
+              <RequireAuth staffOnly>
+                <AdminLayout />
+              </RequireAuth>
+            }
+          >
+            <Route index element={<AdminHomePage />} />
+            <Route path="clients" element={<AdminClientsPage />} />
+            <Route path="clients/:id" element={<AdminClientPage />} />
+            <Route path="projects/:id" element={<AdminProjectPage />} />
+            <Route path="insights" element={<InsightsPage />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

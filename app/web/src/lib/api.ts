@@ -62,7 +62,26 @@ export const api = {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   },
+  patch<T>(path: string, body: unknown): Promise<T> {
+    return request<T>(path, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
 };
+
+/** テキストを .md 等のファイルとしてダウンロードさせる（RFQ本文の保存用） */
+export function downloadText(filename: string, text: string, mime = 'text/markdown'): void {
+  const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 /** visual-engine 接続点（CONTRACT §6）。購読側は未実装、発火のみ。 */
 export function emitVisual(state: string, extra?: Record<string, unknown>): void {
