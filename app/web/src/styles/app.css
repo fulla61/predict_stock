@@ -1,0 +1,169 @@
+/* ============================================================
+   App-specific styles (login / header / pending / admin queue)
+   — prototype のトークン・トーンに合わせた追加分
+   ============================================================ */
+
+/* ---- header (user row) ---- */
+header.site .head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.user-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--sub);
+  padding-top: 4px;
+}
+.user-name { font-weight: 600; color: var(--ink); }
+.btn-logout {
+  background: none;
+  border: none;
+  color: var(--faint);
+  font-size: 12px;
+  font-family: var(--font-jp);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.btn-logout:hover { color: var(--accent); }
+.badge-demo-ai {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--warn);
+  background: rgba(196, 134, 58, 0.12);
+  border-radius: 999px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+
+/* ---- login ---- */
+.login-card {
+  margin-top: 40px;
+  padding: 36px 34px 34px;
+  max-width: 440px;
+}
+.login-card .field-label { margin: 20px 0 8px; }
+.login-card .field-label:first-of-type { margin-top: 0; }
+.login-cta { margin-top: 28px; }
+.login-cta .btn { width: 100%; }
+.form-error {
+  margin-top: 18px;
+  background: rgba(196, 134, 58, 0.1);
+  border: 1px solid rgba(196, 134, 58, 0.35);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 13.5px;
+  color: var(--warn);
+  line-height: 1.8;
+}
+
+/* ---- 汎用エラー/ローディング ---- */
+.page-note {
+  margin-top: 40px;
+  color: var(--sub);
+  font-size: 14px;
+}
+.spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 900ms linear infinite;
+  flex: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 3s; }
+}
+
+/* ---- pending (担当者確認中) ---- */
+.pending-card {
+  margin-top: 44px;
+  padding: 40px 36px;
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.pending-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.pending-title { font-size: 18px; font-family: var(--font-jp); font-weight: 600; line-height: 1.7; }
+.pending-desc { margin-top: 8px; font-size: 14px; color: var(--sub); }
+
+/* ---- admin ---- */
+.queue-list { margin-top: 32px; display: flex; flex-direction: column; gap: 16px; }
+.queue-item {
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+.queue-item:hover { border-color: var(--accent); }
+.queue-main { flex: 1; min-width: 0; }
+.queue-id {
+  font-family: var(--font-latin);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--accent-deep);
+}
+.queue-client { font-size: 13px; color: var(--sub); margin-left: 10px; }
+.queue-summary {
+  margin-top: 4px;
+  font-size: 13.5px;
+  color: var(--sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.queue-date { font-size: 12px; color: var(--faint); flex: none; }
+.queue-open { color: var(--accent); flex: none; }
+.revise-box { margin-top: 16px; }
+.revise-box textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  padding: 12px 16px;
+  font-family: var(--font-jp);
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink);
+}
+.revise-box textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+
+@media (max-width: 480px) {
+  .login-card { padding: 28px 22px; }
+  .pending-card { padding: 30px 22px; flex-direction: column; }
+  .queue-item { flex-wrap: wrap; }
+}

@@ -7,7 +7,7 @@ export interface MockQuestion {
 }
 
 export interface MockPlan {
-  key: 'rec' | 'small' | 'cost';
+  key: 'rec' | 'small' | 'price_first';
   name: string;
   concept: string;
   price: string;
@@ -47,7 +47,7 @@ export const CATEGORIES: MockCategory[] = [
       { key: 'small', name: '小ロット優先', concept: 'まず作って、市場の反応を見たい方に', price: '¥1,450〜1,680', qty: '300個〜', delivery: '約45日',
         good: ['300個から生産でき、在庫リスクを小さく始められる', 'サンプルから量産までの切り替えが速い'],
         tradeoff: '単価は量産時より4〜5割ほど高くなります' },
-      { key: 'cost', name: '価格優先', concept: '販売価格を抑えたい・数量が見えている方に', price: '¥620〜780', qty: '3,000個〜', delivery: '約75日',
+      { key: 'price_first', name: '価格優先', concept: '販売価格を抑えたい・数量が見えている方に', price: '¥620〜780', qty: '3,000個〜', delivery: '約75日',
         good: ['大ロット専業工場で単価を大きく圧縮', '箱・付属品も同時生産でさらにコストダウン'],
         tradeoff: '納期が長めで、仕様変更の自由度は下がります' },
     ],
@@ -70,7 +70,7 @@ export const CATEGORIES: MockCategory[] = [
       { key: 'small', name: '小ロット優先', concept: 'イベントや試験販売にちょうどよく', price: '¥1,050〜1,250', qty: '200枚〜', delivery: '約35日',
         good: ['200枚から作れてイベント日程にも間に合いやすい', '版代を抑えた1色印刷プランあり'],
         tradeoff: '厚手生地・特色印刷は選択肢が絞られます' },
-      { key: 'cost', name: '価格優先', concept: '配布用・ノベルティ前提のコスト設計', price: '¥380〜480', qty: '3,000枚〜', delivery: '約65日',
+      { key: 'price_first', name: '価格優先', concept: '配布用・ノベルティ前提のコスト設計', price: '¥380〜480', qty: '3,000枚〜', delivery: '約65日',
         good: ['軽量生地×大ロットで1枚あたりを大きく圧縮', '個包装・のし対応も低単価で追加可能'],
         tradeoff: '生地は薄手中心で、高級感は控えめになります' },
     ],
@@ -93,7 +93,7 @@ export const CATEGORIES: MockCategory[] = [
       { key: 'small', name: '小ロット優先', concept: '新ブランドの立ち上げ・反応見に', price: '¥1,280〜1,520', qty: '300個〜', delivery: '約40日',
         good: ['300個からの生産で棚の反応を早く確かめられる', 'パッケージは既製箱＋ラベルで初期費用を圧縮'],
         tradeoff: '素材試験は簡易版になります（販売前に相談推奨）' },
-      { key: 'cost', name: '価格優先', concept: '定番化した商品の原価改善に', price: '¥520〜640', qty: '3,000個〜', delivery: '約70日',
+      { key: 'price_first', name: '価格優先', concept: '定番化した商品の原価改善に', price: '¥520〜640', qty: '3,000個〜', delivery: '約70日',
         good: ['金型・版を継続利用して原価を段階的に低減', '出荷単位の調整で保管費用も抑えられる'],
         tradeoff: '仕様の細かな変更は次ロットからの反映になります' },
     ],
@@ -116,7 +116,7 @@ export const CATEGORIES: MockCategory[] = [
       { key: 'small', name: '小ロット優先', concept: 'クラファン・受注生産スタートに', price: '¥7,200〜8,400', qty: '50台〜', delivery: '約50日',
         good: ['50台から生産でき、受注分だけ作る運用が可能', '試作1台を先行制作して細部を詰められる'],
         tradeoff: '1台あたりの輸送費比率が高くなります' },
-      { key: 'cost', name: '価格優先', concept: '規格材ベースでコストを作り込む', price: '¥3,200〜3,900', qty: '1,000台〜', delivery: '約90日',
+      { key: 'price_first', name: '価格優先', concept: '規格材ベースでコストを作り込む', price: '¥3,200〜3,900', qty: '1,000台〜', delivery: '約90日',
         good: ['規格材＋ノックダウン設計で物流費まで圧縮', '継続発注で金具類の共通化がさらに効く'],
         tradeoff: '寸法・樹種の自由度は規格の範囲内になります' },
     ],
@@ -139,7 +139,7 @@ export const CATEGORIES: MockCategory[] = [
       { key: 'small', name: '小ロット優先', concept: '処方テスト・先行販売の分だけ', price: '¥320〜420', qty: '500個〜', delivery: '約40日',
         good: ['500個からスタートでき、ラベルで世界観を作れる', '中身充填パートナーの紹介まで対応'],
         tradeoff: '加飾は印刷ラベル中心になります' },
-      { key: 'cost', name: '価格優先', concept: '定番SKUの容器原価を下げる', price: '¥95〜130', qty: '10,000個〜', delivery: '約75日',
+      { key: 'price_first', name: '価格優先', concept: '定番SKUの容器原価を下げる', price: '¥95〜130', qty: '10,000個〜', delivery: '約75日',
         good: ['大ロット成形で1個あたりを大幅に圧縮', '年間発注計画とあわせた分納で倉庫費も削減'],
         tradeoff: 'ロットが大きく、初回からの採用はリスクがあります' },
     ],
@@ -162,7 +162,7 @@ export const CATEGORIES: MockCategory[] = [
       { key: 'small', name: '小ロット優先', concept: 'まず形にして、手応えを確かめる', price: '¥1,200〜1,450', qty: '300個〜', delivery: '約40日',
         good: ['300個から生産でき、初期投資を抑えられる', '試作サンプルを最短2週間でお手元に'],
         tradeoff: '単価は量産時より高めになります' },
-      { key: 'cost', name: '価格優先', concept: '数量前提でしっかり原価を作る', price: '¥520〜680', qty: '3,000個〜', delivery: '約70日',
+      { key: 'price_first', name: '価格優先', concept: '数量前提でしっかり原価を作る', price: '¥520〜680', qty: '3,000個〜', delivery: '約70日',
         good: ['大ロット前提の工場選定で単価を圧縮', 'パッケージ同時生産でトータルコストを最適化'],
         tradeoff: '納期に余裕を見ていただく必要があります' },
     ],

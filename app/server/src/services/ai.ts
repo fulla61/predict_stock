@@ -32,7 +32,7 @@ export interface AnalysisResult {
 }
 
 export interface ProposalOptionResult {
-  key: 'rec' | 'small' | 'cost';
+  key: 'rec' | 'small' | 'price_first';
   title: string;
   concept: string;
   priceRangeJpy: string;
@@ -187,7 +187,7 @@ const PROPOSE_TOOL: Anthropic.Tool = {
           additionalProperties: false,
           required: ['key', 'title', 'concept', 'price_range_jpy', 'qty_from', 'lead_days', 'pros', 'tradeoff', 'recommended'],
           properties: {
-            key: { type: 'string', enum: ['rec', 'small', 'cost'] },
+            key: { type: 'string', enum: ['rec', 'small', 'price_first'] },
             title: { type: 'string' },
             concept: { type: 'string' },
             price_range_jpy: {
@@ -308,7 +308,7 @@ export async function generateProposals(ctx: ProjectContext): Promise<ProposalsR
       .join('\n');
     interface Raw {
       options: {
-        key: 'rec' | 'small' | 'cost';
+        key: 'rec' | 'small' | 'price_first';
         title: string;
         concept: string;
         price_range_jpy: string;
