@@ -16,8 +16,9 @@ import {
 } from '../repo/proposals.js';
 import { audit, timeline, appendApproval } from '../repo/audit.js';
 import { generateProposalsForProject } from '../services/consultation.js';
-import { toOptionView, toUnderstandingView } from '../views.js';
-import type { AdminActionResponse, AdminQueueResponse } from '../../../shared/api-types.js';
+import { listLoopOptions, listModifyRequests, listPendingLoops } from '../repo/loops.js';
+import { toLoopOptionStaffView, toOptionView, toUnderstandingView } from '../views.js';
+import type { AdminActionResponse, AdminQueueResponseV2 } from '../../../shared/api-types.js';
 
 export const adminRouter = Router();
 
@@ -26,7 +27,7 @@ const NOT_FOUND = { error: { code: 'NOT_FOUND', message: '提案が見つかり�
 // ---- GET /api/admin/queue ----
 adminRouter.get('/admin/queue', requireAuth, requireStaff, (_req, res) => {
   const rows = listPendingProposals();
-  const body: AdminQueueResponse = {
+  const body: AdminQueueResponseV2 = {
     items: rows.map((pr) => {
       const requirement = getLatestRequirement(pr.project_id);
       return {
@@ -42,6 +43,29 @@ adminRouter.get('/admin/queue', requireAuth, requireStaff, (_req, res) => {
         createdAt: pr.created_at,
       };
     }),
+    // BI-2: 判断キュー拡張（Loop承認待ち / 顧客MODIFY着信）
+    loops: listPendingLoops().map((l) => ({
+      loopId: l.id,
+      projectId: l.project_id,
+      publicId: l.project_public_id,
+      clientName: l.client_name,
+      title: l.title,
+      loopNo: l.loop_no,
+      triggerReason: l.trigger_reason,
+      options: toLoopOptionStaffView(listLoopOptions(l.id)),
+      aiMode: l.ai_mode ?? 'mock',
+      createdAt: l.created_at,
+    })),
+    modifyRequests: listModifyRequests().map((l) => ({
+      loopId: l.id,
+      projectId: l.project_id,
+      publicId: l.project_public_id,
+      clientName: l.client_name,
+      title: l.title,
+      loopNo: l.loop_no,
+      modifyNote: l.modify_note,
+      decidedAt: l.decided_at,
+    })),
   };
   res.json(body);
 });

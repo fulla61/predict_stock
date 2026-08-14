@@ -9,6 +9,10 @@ import { authRouter } from './routes/auth.js';
 import { consultationsRouter } from './routes/consultations.js';
 import { projectsRouter } from './routes/projects.js';
 import { adminRouter } from './routes/admin.js';
+import { adminClientsRouter } from './routes/adminClients.js';
+import { factoriesRouter } from './routes/factories.js';
+import { rfqsRouter } from './routes/rfqs.js';
+import { loopsRouter } from './routes/loops.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -24,6 +28,10 @@ app.use('/api', authRouter);
 app.use('/api', consultationsRouter);
 app.use('/api', projectsRouter);
 app.use('/api', adminRouter);
+app.use('/api', adminClientsRouter);
+app.use('/api', factoriesRouter);
+app.use('/api', rfqsRouter);
+app.use('/api', loopsRouter);
 
 // web/dist があれば静的配信（無くてもAPIは動く）
 if (fs.existsSync(config.webDist)) {

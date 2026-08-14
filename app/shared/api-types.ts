@@ -154,3 +154,285 @@ export interface AdminActionResponse {
   ok: true;
   status: ProposalStatus;
 }
+
+
+// ============================================================
+// BI-2（CONTRACT-2）
+// web/src/types.ts の暫定型と互換の形状（web側は契約確定後に再エクスポートへ切替）
+// ============================================================
+
+// ---- 会社の「見え方の設定」（clients.settings） ----
+export type ExperienceLevelOverride = 'EXP_BEGINNER' | 'EXP_EXPERIENCED' | 'EXP_PRO';
+
+export interface ClientSettingsView {
+  /** null = 自動判定のまま */
+  experienceLevelOverride: ExperienceLevelOverride | null;
+  defaultEntryRoute: EntryRoute | null;
+  note: string;
+}
+export interface ClientSettingsPatchRequest {
+  experienceLevelOverride?: ExperienceLevelOverride | null;
+  defaultEntryRoute?: EntryRoute | null;
+  note?: string;
+}
+export interface ClientSettingsPatchResponse {
+  ok: true;
+  settings: ClientSettingsView;
+}
+
+// ---- GET /admin/clients ----
+export interface AdminClientListItem {
+  clientId: number;
+  publicId: string;
+  name: string;
+  activeProjects: number;
+  /** 状態内訳（順調/確認待ち/要対応） */
+  statusCounts: { ok: number; waiting: number; action: number };
+  lastActivityAt: string | null;
+  lastActivityText: string | null;
+}
+export interface AdminActivityItem {
+  projectId: number;
+  publicId: string;
+  clientName: string;
+  title: string;
+  what: string;
+  at: string;
+}
+export interface AdminClientsResponse {
+  items: AdminClientListItem[];
+  /** 動きがあった案件（直近更新） */
+  recentActivity: AdminActivityItem[];
+}
+
+// ---- GET /admin/clients/:id ----
+export interface AdminProjectSummary {
+  projectId: number;
+  publicId: string;
+  title: string;
+  status: string;
+  updatedAt: string | null;
+}
+export interface AdminClientDetailResponse {
+  clientId: number;
+  publicId: string;
+  name: string;
+  /** 自動判定されたお客様レベル（例: "初心者"） */
+  experienceLevelAuto?: string;
+  settings: ClientSettingsView;
+  projects: AdminProjectSummary[];
+  activity: { what: string; at: string }[];
+}
+
+// ---- 工場台帳 ----
+export type FactoryRiskClass = 'FRISK_LOW' | 'FRISK_MEDIUM' | 'FRISK_HIGH' | 'FRISK_UNKNOWN';
+
+export interface FactoryView {
+  id: number;
+  publicId: string; // FA-{NNNN}
+  name: string;
+  region: string | null;
+  specialty: string | null;
+  riskClass: FactoryRiskClass;
+  channelNote: string | null;
+  createdAt: string;
+}
+export interface FactoriesResponse {
+  items: FactoryView[];
+}
+export interface CreateFactoryRequest {
+  name: string;
+  region?: string;
+  specialty?: string;
+  riskClass?: FactoryRiskClass;
+  channelNote?: string;
+}
+// POST /admin/factories → FactoryView をそのまま返す
+
+// ---- RFQ ----
+export type RfqStatus = 'DRAFT' | 'SENT';
+
+export interface RfqView {
+  id: number;
+  publicId: string; // {ProjectID}-RFQ-{NN}
+  projectId: number;
+  /** 中国語ドラフト本文（画面でコピー/.mdダウンロード） */
+  body: string;
+  status: RfqStatus;
+  sentAt: string | null;
+  sentChannel: string | null;
+  factoryIds: number[];
+  aiMode: AiMode;
+  createdAt: string;
+}
+export interface CreateRfqRequest {
+  factoryIds: number[];
+}
+// POST /admin/projects/:id/rfq → RfqView をそのまま返す
+export interface RfqSentRequest {
+  channel: string; // 'WeChat' | 'メール' 等（手入力）
+}
+export interface RfqSentResponse {
+  ok: true;
+  status: RfqStatus;
+  sentAt: string;
+}
+
+// ---- 見積（版管理・上書き禁止） ----
+export type QuoteCurrency = 'CNY' | 'JPY' | 'USD';
+export type QuoteConditionType = 'MOQ' | 'PRICE_TIER' | 'TOOLING' | 'LEADTIME' | 'OTHER';
+
+export interface QuoteConditionInput {
+  conditionType: QuoteConditionType;
+  moqDimension?: string;
+  thresholdQty?: number;
+  value?: string;
+  note?: string;
+}
+export interface CreateQuoteRequest {
+  factoryId: number;
+  currency: QuoteCurrency;
+  unitPrice: number;
+  moq: number;
+  toolingCost?: number;
+  sampleCost?: number;
+  leadDays: number;
+  validUntil?: string;
+  notes?: string;
+  conditions?: QuoteConditionInput[];
+}
+export interface QuoteView {
+  id: number;
+  publicId: string; // {ProjectID}-QT-{NN}
+  rfqId: number;
+  factoryId: number;
+  /** STAFF画面のみ（顧客レスポンスには存在しない） */
+  factoryName: string;
+  versionNo: number;
+  supersedesQuoteId: number | null;
+  currency: QuoteCurrency;
+  unitPrice: number;
+  moq: number;
+  toolingCost: number | null;
+  sampleCost: number | null;
+  leadDays: number;
+  validUntil: string | null;
+  notes: string | null;
+  conditions: QuoteConditionInput[];
+  createdAt: string;
+}
+// POST /admin/rfqs/:id/quotes → QuoteView をそのまま返す
+
+// ---- 商流Loop / 選べる進め方 ----
+export type LoopStatus = 'PENDING_APPROVAL' | 'APPROVED';
+export type LoopDecision = 'ACCEPT' | 'MODIFY' | 'HOLD';
+
+/** 顧客向けOption（サニタイズ済: 工場名・原価・based_on_quote_id・internal_note は存在しない） */
+export interface LoopOptionClientView {
+  key: string;
+  title: string;
+  concept: string;
+  customerPriceRange: string;
+  qtyFrom: string;
+  leadDays: string;
+  pros: string[];
+  tradeoff: string;
+  recommended: boolean;
+  selected: boolean;
+}
+/** 社内向けOption（内部フィールド付き） */
+export interface LoopOptionStaffView extends LoopOptionClientView {
+  id: number;
+  basedOnQuoteId: number | null;
+  internalNote: string | null;
+}
+export interface LoopStaffView {
+  id: number;
+  publicId: string; // {ProjectID}-LOOP-{NN}
+  projectId: number;
+  loopNo: number;
+  status: LoopStatus;
+  triggerReason: string;
+  /** 希望 vs 回答の差分JSON（内部用） */
+  feasibility: unknown;
+  customerDecision: LoopDecision | null;
+  modifyNote: string | null;
+  decidedAt: string | null;
+  options: LoopOptionStaffView[];
+  aiMode: AiMode;
+  createdAt: string;
+}
+export interface LoopClientView {
+  id: number;
+  loopNo: number;
+  options: LoopOptionClientView[];
+  customerDecision: LoopDecision | null;
+  selectedOptionKey: string | null;
+}
+// POST /admin/projects/:id/loop → LoopStaffView をそのまま返す
+export interface LoopOptionPatch {
+  key: string;
+  title?: string;
+  concept?: string;
+  customerPriceRange?: string;
+  qtyFrom?: string;
+  leadDays?: string;
+  pros?: string[];
+  tradeoff?: string;
+  recommended?: boolean;
+}
+export interface LoopOptionsPatchRequest {
+  options: LoopOptionPatch[];
+}
+export interface LoopActionResponse {
+  ok: true;
+  loop?: LoopStaffView;
+}
+export interface LoopDecideRequest {
+  decision: 'ACCEPT' | 'MODIFY';
+  selectedOptionKey?: string;
+  modifyNote?: string;
+}
+export interface LoopDecideResponse {
+  ok: true;
+  decision: 'ACCEPT' | 'MODIFY';
+}
+
+// ---- 既存ビューのBI-2拡張 ----
+export interface ProjectViewClientV2 extends ProjectViewClient {
+  /** 承認済みLoopがある場合のみ（サニタイズ済）。それ以外は null */
+  loop: LoopClientView | null;
+}
+export interface ProjectViewStaffV2 extends ProjectViewStaff {
+  rfqs: RfqView[];
+  quotes: QuoteView[];
+  loops: LoopStaffView[];
+}
+
+// ---- 判断キュー拡張（提案承認待ち + Loop承認待ち + 条件変更希望） ----
+export interface AdminLoopQueueItem {
+  loopId: number;
+  projectId: number;
+  publicId: string; // project public id
+  clientName: string;
+  title: string;
+  loopNo: number;
+  triggerReason: string;
+  options: LoopOptionStaffView[];
+  aiMode: AiMode;
+  createdAt: string;
+}
+export interface AdminModifyQueueItem {
+  loopId: number;
+  projectId: number;
+  publicId: string; // project public id
+  clientName: string;
+  title: string;
+  loopNo: number;
+  modifyNote: string | null;
+  decidedAt: string | null;
+}
+export interface AdminQueueResponseV2 extends AdminQueueResponse {
+  loops: AdminLoopQueueItem[];
+  modifyRequests: AdminModifyQueueItem[];
+}

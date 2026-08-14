@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { db } from './db/db.js';
 import { config } from './config.js';
-import { nextClientPublicId } from './repo/ids.js';
+import { nextClientPublicId, nextFactoryPublicId } from './repo/ids.js';
 
 // STAFF 1名 + デモCLIENT 1社1名（既存ならスキップ）
 async function seed(): Promise<void> {
@@ -34,6 +34,47 @@ async function seed(): Promise<void> {
   } else {
     console.log(`[seed] CLIENT exists: ${clientEmail}`);
   }
+
+  // BI-2: 工場2社（示例）+ 係数seed
+  const demoFactories = [
+    {
+      name: '宁波B工場',
+      region: '浙江省寧波市',
+      specialties: '生活雑貨・キッチン用品・シリコン成型',
+      risk: 'FRISK_LOW',
+      channel: 'WeChat（担当: 王さん）/ メール可',
+    },
+    {
+      name: '深圳C工場',
+      region: '広東省深圳市',
+      specialties: '電子小物・アクセサリー・小ロット対応',
+      risk: 'FRISK_MEDIUM',
+      channel: 'WeChat（担当: 陳さん）',
+    },
+  ];
+  for (const f of demoFactories) {
+    const exists = db.prepare(`SELECT id FROM factories WHERE name = ?`).get(f.name);
+    if (exists) {
+      console.log(`[seed] factory exists: ${f.name}`);
+      continue;
+    }
+    const publicId = nextFactoryPublicId();
+    db.prepare(
+      `INSERT INTO factories (public_id, name, region, specialties, risk_class, channel_note)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(publicId, f.name, f.region, f.specialties, f.risk, f.channel);
+    console.log(`[seed] factory created: ${f.name} (${publicId})`);
+  }
+
+  // 係数（CONFIGURABLE。既存値は上書きしない）
+  db.prepare(
+    `INSERT INTO settings (key, value) VALUES ('price_coefficient', '1.35')
+     ON CONFLICT(key) DO NOTHING`
+  ).run();
+  db.prepare(
+    `INSERT INTO settings (key, value) VALUES ('cny_jpy_rate', '21')
+     ON CONFLICT(key) DO NOTHING`
+  ).run();
 
   db.prepare(
     `INSERT INTO settings (key, value) VALUES ('seeded_at', datetime('now'))

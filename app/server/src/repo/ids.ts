@@ -29,3 +29,26 @@ export function nextClientPublicId(): string {
   const n = bump('GLOBAL', 'GLOBAL', 'CL');
   return `CL-${String(n).padStart(4, '0')}`;
 }
+
+// ---- BI-2 ----
+
+export function nextFactoryPublicId(): string {
+  const n = bump('GLOBAL', 'GLOBAL', 'FA');
+  return `FA-${String(n).padStart(4, '0')}`;
+}
+
+// {ProjectID}-RFQ-{NN} / -QT-{NN} / -LOOP-{NN}（project単位で採番・再利用禁止）
+function nextProjectScopedId(projectPublicId: string, typeCode: 'RFQ' | 'QT' | 'LOOP'): string {
+  const n = bump('PROJECT', projectPublicId, typeCode);
+  return `${projectPublicId}-${typeCode}-${String(n).padStart(2, '0')}`;
+}
+
+export function nextRfqPublicId(projectPublicId: string): string {
+  return nextProjectScopedId(projectPublicId, 'RFQ');
+}
+export function nextQuotePublicId(projectPublicId: string): string {
+  return nextProjectScopedId(projectPublicId, 'QT');
+}
+export function nextLoopPublicId(projectPublicId: string): string {
+  return nextProjectScopedId(projectPublicId, 'LOOP');
+}

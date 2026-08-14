@@ -24,12 +24,23 @@ import {
 } from '../repo/proposals.js';
 import { audit, timeline, appendApproval } from '../repo/audit.js';
 import { generateProposalsForProject } from '../services/consultation.js';
-import { toProposalView, toQuestionView, toUnderstandingView } from '../views.js';
+import { getLatestLoop, listLoopOptions, listLoopsForProject } from '../repo/loops.js';
+import { listQuoteConditions, listQuotesForProject, listRfqRecipientIds, listRfqsForProject } from '../repo/rfqs.js';
+import {
+  toLoopClientView,
+  toLoopStaffView,
+  toProposalView,
+  toQuestionView,
+  toQuoteView,
+  toRfqView,
+  toUnderstandingView,
+} from '../views.js';
 import type {
   AnswersResponse,
   GenerateProposalsResponse,
-  ProjectViewClient,
-  ProjectViewStaff,
+  LoopClientView,
+  ProjectViewClientV2,
+  ProjectViewStaffV2,
   SelectResponse,
 } from '../../../shared/api-types.js';
 
@@ -176,7 +187,7 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
     if (!project) return void res.status(404).json(NOT_FOUND);
     const requirement = getLatestRequirement(projectId);
     const proposal = getLatestProposal(projectId);
-    let proposalPart: ProjectViewClient['proposal'] = { state: 'none' };
+    let proposalPart: ProjectViewClientV2['proposal'] = { state: 'none' };
     if (proposal) {
       if (proposal.status === 'APPROVED' || proposal.status === 'SELECTED') {
         proposalPart = { state: 'ready', proposal: toProposalView(proposal, listOptions(proposal.id)) };
@@ -185,7 +196,18 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
         proposalPart = { state: 'pending_approval' };
       }
     }
-    const body: ProjectViewClient = {
+    // BI-2: 承認済みloopがあればサニタイズ済みoptionsを含める（遮断: toLoopClientView経由のみ）。
+    // PENDING_APPROVAL / MODIFY後の再調整中は null（画面は「担当者が再調整しています」を維持）。
+    const latestLoop = getLatestLoop(projectId);
+    let loopPart: LoopClientView | null = null;
+    if (
+      latestLoop &&
+      latestLoop.status === 'APPROVED' &&
+      latestLoop.customer_decision !== 'MODIFY'
+    ) {
+      loopPart = toLoopClientView(latestLoop, listLoopOptions(latestLoop.id));
+    }
+    const body: ProjectViewClientV2 = {
       projectId: project.id,
       publicId: project.public_id,
       title: project.title,
@@ -195,6 +217,7 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
       questions: toQuestionView(listQuestions(projectId)),
       proposal: proposalPart,
       aiMode: (requirement?.ai_mode as 'live' | 'mock') ?? 'mock',
+      loop: loopPart,
     };
     return void res.json(body);
   }
@@ -205,7 +228,7 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
   const requirement = getLatestRequirement(projectId);
   const proposal = getLatestProposal(projectId);
   const dna = getProjectDna(projectId);
-  const body: ProjectViewStaff = {
+  const body: ProjectViewStaffV2 = {
     projectId: project.id,
     publicId: project.public_id,
     title: project.title,
@@ -222,6 +245,10 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
       ? { state: proposal.status, proposal: toProposalView(proposal, listOptions(proposal.id)) }
       : { state: 'none' },
     aiMode: (requirement?.ai_mode as 'live' | 'mock') ?? 'mock',
+    // BI-2: STAFFは商流の全体（loop内部フィールド・RFQ・見積）を閲覧可
+    loops: listLoopsForProject(projectId).map((l) => toLoopStaffView(l, listLoopOptions(l.id))),
+    rfqs: listRfqsForProject(projectId).map((r) => toRfqView(r, listRfqRecipientIds(r.id))),
+    quotes: listQuotesForProject(projectId).map((q) => toQuoteView(q, listQuoteConditions(q.id))),
   };
   res.json(body);
 });

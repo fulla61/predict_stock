@@ -47,7 +47,7 @@ export function timeline(params: {
   );
 }
 
-// approvals は追記専用（判定は行追加）
+// approvals は追記専用（判定は行追加）。追加した行のIDを返す。
 export function appendApproval(params: {
   targetTable: string;
   targetId: number;
@@ -55,8 +55,8 @@ export function appendApproval(params: {
   action: 'REQUEST' | 'APPROVED' | 'REVISION_REQUESTED';
   actorUserId?: number | null;
   note?: string | null;
-}): void {
-  db.prepare(
+}): number {
+  const res = db.prepare(
     `INSERT INTO approvals (target_table, target_id, request_type, action, actor_user_id, note)
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run(
@@ -67,4 +67,5 @@ export function appendApproval(params: {
     params.actorUserId ?? null,
     params.note ?? null
   );
+  return Number(res.lastInsertRowid);
 }
