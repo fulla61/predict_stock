@@ -29,8 +29,12 @@ import type {
   ClientProjectsResponse,
   DocumentView,
   DocumentsResponse,
-  ProjectViewClientV3,
 } from '../types-bi3';
+import type {
+  ClientProgressSummary,
+  ClientSampleView,
+  ProjectViewClientV4,
+} from '../types-bi4';
 
 type Step =
   | 'input'
@@ -47,7 +51,15 @@ type Step =
   /* ---- BI-3: 量産合意書（G-02） ---- */
   | 'agreement'
   | 'agreement_change_sent'
-  | 'agreement_done';
+  | 'agreement_done'
+  /* ---- BI-4: サンプル確認〜生産進捗〜お届け〜振り返り ---- */
+  | 'sample_review'
+  | 'sample_change_sent'
+  | 'sample_approved'
+  | 'progress'
+  | 'delivered'
+  | 'feedback'
+  | 'feedback_done';
 
 const ENTRY_CHIPS: { route: EntryRoute; label: string; placeholder: string }[] = [
   {
@@ -220,6 +232,20 @@ export default function ConsultPage() {
   const [agBusy, setAgBusy] = useState(false);
   const [agChangeOpen, setAgChangeOpen] = useState(false);
   const [agNote, setAgNote] = useState('');
+
+  /* ---- BI-4: サンプル確認 / 進捗 / お届け / フィードバック ---- */
+  const [sample, setSample] = useState<ClientSampleView | null>(null);
+  const [sampleBusy, setSampleBusy] = useState(false);
+  const [sampleChangeOpen, setSampleChangeOpen] = useState(false);
+  const [sampleNote, setSampleNote] = useState('');
+  const decidedSampleIds = useRef<Set<number>>(new Set());
+  const [progress, setProgress] = useState<ClientProgressSummary | null>(null);
+  const [projState, setProjState] = useState<string | null>(null);
+  const [fbRating, setFbRating] = useState(0);
+  const [fbComment, setFbComment] = useState('');
+  const [fbRepeat, setFbRepeat] = useState(false);
+  const [fbBusy, setFbBusy] = useState(false);
+  const fbDone = useRef(false);
 
   const canvasRef = useRef<HTMLTextAreaElement>(null);
   const submittedText = useRef('');
@@ -408,7 +434,7 @@ export default function ConsultPage() {
   const pollProject = useCallback(async () => {
     if (!projectId) return;
     try {
-      const pj = await api.get<ProjectViewClientV3>(`/projects/${projectId}`);
+      const pj = await api.get<ProjectViewClientV4>(`/projects/${projectId}`);
       if (pj.aiMode) setAiMode(pj.aiMode);
       if (pj.proposal.state === 'ready' && pj.proposal.proposal.options.length) {
         setOptions(pj.proposal.proposal.options);
@@ -428,12 +454,55 @@ export default function ConsultPage() {
     return () => window.clearInterval(t);
   }, [step, pollProject]);
 
-  /* ---------------- BI-2/BI-3: 承認済みLoop・量産合意書の10sポーリング ---------------- */
+  /* ---------------- BI-2/BI-3/BI-4: 承認済みLoop・合意書・後工程の10sポーリング ---------------- */
   const pollLoop = useCallback(async () => {
     if (!projectId) return;
     try {
-      const pj = await api.get<ProjectViewClientV3>(`/projects/${projectId}`);
+      const pj = await api.get<ProjectViewClientV4>(`/projects/${projectId}`);
       if (pj.aiMode) setAiMode(pj.aiMode);
+
+      /* ---- BI-4: 後工程（サーバーは既存フィールドstatusに工程を返す。stateも許容） ---- */
+      const state =
+        typeof pj.state === 'string' ? pj.state : typeof pj.status === 'string' ? pj.status : null;
+      const prog = pj.progress ?? pj.progressSummary ?? null;
+
+      /* お取引完了: 受取確認済み → フィードバック（送信済みならお礼画面） */
+      if (state === 'COMPLETED') {
+        setProgress(prog);
+        setProjState(state);
+        if ((pj.feedback && pj.feedback.rating != null) || fbDone.current) {
+          fbDone.current = true;
+          setStep('feedback_done');
+        } else {
+          setStep('feedback');
+        }
+        return;
+      }
+
+      /* お届け済み: 受取確認のご案内 */
+      if (state === 'DELIVERED') {
+        setProgress(prog);
+        setProjState(state);
+        setStep('delivered');
+        return;
+      }
+
+      /* サンプルがお客様確認待ちになったら確認画面へ */
+      const smp = (pj.samples ?? []).find(
+        (s) =>
+          s &&
+          s.status === 'CUSTOMER_REVIEW' &&
+          !decidedSampleIds.current.has(s.id),
+      );
+      if (smp) {
+        setSample(smp);
+        setSampleChangeOpen(false);
+        setSampleNote('');
+        if (pj.agreement) setAgreement(pj.agreement);
+        setStep('sample_review');
+        emitVisual('SAMPLE_READY'); // Presentation Layer 接続点
+        return;
+      }
 
       /* BI-3: 量産合意書がお客様確認待ちになったら合意画面へ（Loopより優先） */
       const ag = pj.agreement;
@@ -442,6 +511,15 @@ export default function ConsultPage() {
         setAgChangeOpen(false);
         setStep('agreement');
         emitVisual('AGREEMENT_READY'); // Presentation Layer 接続点
+        return;
+      }
+
+      /* BI-4: 生産〜輸送中は静かな進捗カード */
+      if (state === 'PRODUCTION' || state === 'INSPECTION' || state === 'SHIPPING') {
+        if (ag) setAgreement(ag);
+        setProgress(prog);
+        setProjState(state);
+        setStep('progress');
         return;
       }
 
@@ -468,13 +546,97 @@ export default function ConsultPage() {
       step !== 'done' &&
       step !== 'modify_pending' &&
       step !== 'loop_done' &&
-      step !== 'agreement_change_sent'
+      step !== 'agreement_change_sent' &&
+      /* BI-4: 待ち・進捗系の画面でも同じポーリングを流用 */
+      step !== 'agreement_done' &&
+      step !== 'sample_change_sent' &&
+      step !== 'sample_approved' &&
+      step !== 'progress' &&
+      step !== 'delivered'
     )
       return;
     void pollLoop();
     const t = window.setInterval(() => void pollLoop(), 10_000);
     return () => window.clearInterval(t);
   }, [step, pollLoop]);
+
+  /* ---------------- BI-4: 進行中案件への復帰（リロード・別端末でも続きから） ---------------- */
+  const resumeTried = useRef(false);
+  useEffect(() => {
+    if (resumeTried.current || projectId !== null || step !== 'input') return;
+    resumeTried.current = true;
+    void (async () => {
+      try {
+        const list = await api.get<{
+          items?: { projectId?: number; id?: number; status?: string; state?: string; updatedAt?: string }[];
+          projects?: { projectId?: number; id?: number; status?: string; state?: string; updatedAt?: string }[];
+        }>('/projects');
+        const items = (list.items ?? list.projects ?? []).filter(Boolean);
+        if (!items.length) return;
+        const active = [...items]
+          .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+          .find((p) => (p.status ?? p.state) !== 'COMPLETED');
+        const activeId = active ? (active.projectId ?? active.id) : undefined;
+        if (!activeId) return;
+        const pj = await api.get<ProjectViewClientV4>(`/projects/${activeId}`);
+        setProjectId(activeId);
+        if (pj.aiMode) setAiMode(pj.aiMode);
+        if (pj.understanding?.length) setUnderstanding(pj.understanding);
+
+        const state =
+          typeof pj.state === 'string' ? pj.state : typeof pj.status === 'string' ? pj.status : null;
+        const prog = pj.progress ?? pj.progressSummary ?? null;
+        if (state === 'DELIVERED') {
+          setProgress(prog);
+          setProjState(state);
+          setStep('delivered');
+          return;
+        }
+        const smp = (pj.samples ?? []).find((sm) => sm && sm.status === 'CUSTOMER_REVIEW');
+        if (smp) {
+          setSample(smp);
+          if (pj.agreement) setAgreement(pj.agreement);
+          setStep('sample_review');
+          return;
+        }
+        if (pj.agreement && pj.agreement.status === 'PENDING_CUSTOMER') {
+          setAgreement(pj.agreement);
+          setStep('agreement');
+          return;
+        }
+        if (state === 'PRODUCTION' || state === 'INSPECTION' || state === 'SHIPPING') {
+          if (pj.agreement) setAgreement(pj.agreement);
+          setProgress(prog);
+          setProjState(state);
+          setStep('progress');
+          return;
+        }
+        if (pj.loop && pj.loop.options.length && !pj.loop.customerDecision) {
+          setLoop(pj.loop);
+          setStep('loop');
+          return;
+        }
+        if (pj.proposal.state === 'ready' && pj.proposal.proposal.options.length) {
+          setOptions(pj.proposal.proposal.options);
+          const sel = pj.proposal.proposal.options.find((o) => o.selected);
+          if (sel) {
+            setChosen(sel);
+            setStep('done'); // doneのポーリングが以後の工程へ進める
+          } else {
+            setStep('proposal');
+          }
+          return;
+        }
+        if (pj.proposal.state === 'pending_approval') {
+          setStep('pending');
+          return;
+        }
+        /* 相談整理の途中など復帰先が定まらない場合は新規相談のまま（まれ） */
+      } catch {
+        /* 復帰できなければ新規相談のまま */
+      }
+    })();
+  }, [projectId, step, setAiMode]);
 
   /* ---------------- BI-3: 量産合意書の決定（APPROVE / REQUEST_CHANGE） ---------------- */
   async function decideAgreement(decision: 'APPROVE' | 'REQUEST_CHANGE') {
@@ -508,6 +670,92 @@ export default function ConsultPage() {
     } finally {
       setAgBusy(false);
     }
+  }
+
+  /* ---------------- BI-4: サンプルの決定（APPROVE / REQUEST_CHANGE） ---------------- */
+  async function decideSample(decision: 'APPROVE' | 'REQUEST_CHANGE') {
+    if (!sample || sampleBusy) return;
+    const note = sampleNote.trim();
+    if (decision === 'REQUEST_CHANGE' && !note) {
+      toast('修正したい点をご記入ください。');
+      return;
+    }
+    setSampleBusy(true);
+    try {
+      await api.post(`/samples/${sample.id}/decide`, {
+        decision,
+        ...(decision === 'REQUEST_CHANGE' ? { note } : {}),
+      });
+      decidedSampleIds.current.add(sample.id);
+      if (decision === 'APPROVE') {
+        setStep('sample_approved');
+        emitVisual('SAMPLE_APPROVED'); // Presentation Layer 接続点
+      } else {
+        setSampleChangeOpen(false);
+        setSampleNote('');
+        setStep('sample_change_sent');
+      }
+    } catch (e) {
+      toast(
+        e instanceof Error
+          ? e.message
+          : '送信できませんでした。時間をおいてもう一度お試しください。',
+      );
+    } finally {
+      setSampleBusy(false);
+    }
+  }
+
+  /* ---------------- BI-4: 受取確認 → ひとことフィードバック ---------------- */
+  async function confirmDelivery() {
+    if (!projectId || fbBusy) return;
+    setFbBusy(true);
+    try {
+      await api.post(`/projects/${projectId}/delivery-confirm`, {});
+      setStep('feedback');
+      emitVisual('DELIVERY_CONFIRMED'); // Presentation Layer 接続点
+    } catch (e) {
+      toast(
+        e instanceof Error
+          ? e.message
+          : '送信できませんでした。時間をおいてもう一度お試しください。',
+      );
+    } finally {
+      setFbBusy(false);
+    }
+  }
+
+  async function submitFeedback() {
+    if (!projectId || fbBusy) return;
+    if (fbRating < 1) {
+      toast('星をタップして、満足度をお選びください。');
+      return;
+    }
+    setFbBusy(true);
+    try {
+      await api.post(`/projects/${projectId}/feedback`, {
+        rating: fbRating,
+        ...(fbComment.trim() ? { comment: fbComment.trim() } : {}),
+        askedRepeat: fbRepeat,
+      });
+      fbDone.current = true;
+      setStep('feedback_done');
+      emitVisual('FEEDBACK_SENT'); // Presentation Layer 接続点
+    } catch (e) {
+      toast(
+        e instanceof Error
+          ? e.message
+          : '送信できませんでした。時間をおいてもう一度お試しください。',
+      );
+    } finally {
+      setFbBusy(false);
+    }
+  }
+
+  function skipFeedback() {
+    /* 送らない選択もできる（ポーリングでフォームに戻さないよう記録） */
+    fbDone.current = true;
+    setStep('feedback_done');
   }
 
   /* ---------------- BI-2: Loopの決定（ACCEPT / MODIFY） ---------------- */
@@ -609,7 +857,25 @@ export default function ConsultPage() {
     setAgreement(null);
     setAgChangeOpen(false);
     setAgNote('');
+    /* BI-4 */
+    setSample(null);
+    setSampleChangeOpen(false);
+    setSampleNote('');
+    decidedSampleIds.current.clear();
+    setProgress(null);
+    setProjState(null);
+    setFbRating(0);
+    setFbComment('');
+    setFbRepeat(false);
+    fbDone.current = false;
     emitVisual('CANVAS_OPEN'); // Presentation Layer 接続点
+  }
+
+  /* リピート導線: 「以前の商品をもう一度」入口で新しい相談を始める */
+  function restartAsRepeat() {
+    restart();
+    setEntry('REPEAT');
+    setPastProjects(null); // 一覧を取り直す
   }
 
   const placeholder =
@@ -636,6 +902,17 @@ export default function ConsultPage() {
         return 4;
       case 'agreement_done':
         return 5;
+      /* ---- BI-4 ---- */
+      case 'sample_review':
+      case 'sample_change_sent':
+      case 'sample_approved':
+        return 3;
+      case 'progress':
+        return projState === 'SHIPPING' ? 7 : projState === 'INSPECTION' ? 6 : 5;
+      case 'delivered':
+      case 'feedback':
+      case 'feedback_done':
+        return 7;
       default:
         return 0;
     }
@@ -1645,6 +1922,410 @@ export default function ConsultPage() {
         </section>
       )}
 
+      {/* ---------- BI-4: サンプル確認 ---------- */}
+      {step === 'sample_review' && sample && (
+        <section className="step enter" aria-labelledby="h-smp">
+          <h2 className="h-main" id="h-smp">
+            サンプルが届きました。
+            <br />
+            写真をご確認ください
+          </h2>
+          <p className="h-sub">
+            <Tt
+              term="サンプル"
+              desc="量産の前に実際に作った見本です。この見本を基準に量産の品質を決めていきます。"
+            />
+            （量産前の見本）の写真です。この見本で進めてよいか、直したい点がないかだけをご確認ください。
+          </p>
+          <p className="note">
+            {publicId && (
+              <>
+                相談番号: <span className="num">{publicId}</span>
+              </>
+            )}
+            {sample.publicId && (
+              <>
+                {publicId && ' ・ '}
+                見本番号: <span className="num">{sample.publicId}</span>
+              </>
+            )}
+            {sample.roundNo != null && (
+              <>
+                {' '}
+                （<span className="num">{sample.roundNo}</span>回目）
+              </>
+            )}
+          </p>
+
+          {(sample.message ?? sample.requestNote) && (
+            <div className="card agr-card">
+              <h3>担当者からのメッセージ</h3>
+              <p style={{ fontSize: 14, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                {sample.message ?? sample.requestNote}
+              </p>
+            </div>
+          )}
+
+          <div className="card agr-card">
+            <h3>サンプル写真</h3>
+            {(sample.photoDocIds ?? []).length > 0 ? (
+              <div className="sample-gallery">
+                {(sample.photoDocIds ?? []).map((docId, i) => (
+                  <a
+                    key={docId}
+                    href={`/api/documents/${docId}/file`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <img
+                      src={`/api/documents/${docId}/file`}
+                      alt={`サンプル写真 ${i + 1}（タップで拡大）`}
+                    />
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="note" style={{ marginTop: 0 }}>
+                写真を準備しています。少しお待ちください。
+              </p>
+            )}
+          </div>
+
+          {sampleChangeOpen ? (
+            <div className="card loop-modify-box">
+              <h3>修正を希望する</h3>
+              <p className="sub">
+                気になる点をそのままの言葉でお書きください。担当者が工場と調整し、
+                次のサンプルをご用意します。
+              </p>
+              <textarea
+                className="textarea-input"
+                value={sampleNote}
+                onChange={(e) => setSampleNote(e.target.value)}
+                placeholder="例）ロゴの色が思ったより暗い。もう少し明るい青にしたい"
+                aria-label="修正したい点"
+              />
+              <div className="step3-cta" style={{ marginTop: 18 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => decideSample('REQUEST_CHANGE')}
+                  disabled={sampleBusy}
+                >
+                  {sampleBusy ? '送信しています…' : 'この内容で修正を希望する'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setSampleChangeOpen(false)}
+                  disabled={sampleBusy}
+                >
+                  やめる
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="step3-cta">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => decideSample('APPROVE')}
+                disabled={sampleBusy}
+              >
+                {sampleBusy ? '送信しています…' : 'この見本で進める'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setSampleChangeOpen(true)}
+                disabled={sampleBusy}
+              >
+                修正を希望する
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ---------- BI-4: サンプル修正希望 送信後 ---------- */}
+      {step === 'sample_change_sent' && (
+        <section className="step enter" aria-live="polite">
+          <h2 className="h-main" style={{ fontSize: 22 }}>
+            担当者が工場と調整しています
+          </h2>
+          <div className="pending-card card">
+            <span className="pending-icon" aria-hidden="true">
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v6l4 2" />
+              </svg>
+            </span>
+            <div>
+              <div className="pending-title">
+                ご指摘の内容をもとに、担当者が工場と調整し、次のサンプルを手配します。
+              </div>
+              <p className="pending-desc">
+                次のサンプルの写真が届くと、この画面にあらためて表示されます。
+                このままお待ちいただいても、後で開き直していただいても大丈夫です。
+              </p>
+              {publicId && (
+                <p className="note">
+                  相談番号: <span className="num">{publicId}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ---------- BI-4: サンプル承認 完了 ---------- */}
+      {step === 'sample_approved' && (
+        <section className="step enter" aria-labelledby="h-smp-done">
+          <div className="card done-hero">
+            <div className="done-check">
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            <h2 className="done-title" id="h-smp-done">
+              この見本で進めます。
+              <br />
+              ありがとうございました。
+            </h2>
+            <div className="done-next">
+              <strong>次にやること</strong>
+              {agreement && agreement.status === 'PENDING_CUSTOMER'
+                ? '量産合意書（量産で守る品質基準のとりきめ）のご確認へ進みます。まもなくこの画面に表示されます。'
+                : '担当者が進めています。量産合意書（量産で守る品質基準のとりきめ）の準備ができると、この画面でご案内します。'}
+            </div>
+            {publicId && (
+              <p className="note">
+                相談番号: <span className="num">{publicId}</span>
+              </p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ---------- BI-4: 生産〜輸送の進捗 ---------- */}
+      {step === 'progress' && (
+        <section className="step enter" aria-labelledby="h-prog" aria-live="polite">
+          <h2 className="h-main" id="h-prog" style={{ fontSize: 22 }}>
+            いまの状況
+          </h2>
+          {(() => {
+            const pc = progressCard(projState, progress);
+            return (
+              <div className="card progress-card">
+                <div className="progress-title">{pc.title}</div>
+                <p className="progress-desc">{pc.desc}</p>
+                {pc.milestone && <div className="progress-milestone">{pc.milestone}</div>}
+                {publicId && (
+                  <p className="note" style={{ marginTop: 14 }}>
+                    相談番号: <span className="num">{publicId}</span>
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+          <p className="note" style={{ marginTop: 14 }}>
+            お客様にやっていただくことは、いまはありません。状況が変わるとこの画面が自動で切り替わります。
+            閉じても、後で開き直していただいて大丈夫です。
+          </p>
+        </section>
+      )}
+
+      {/* ---------- BI-4: お届け済み（受取確認） ---------- */}
+      {step === 'delivered' && (
+        <section className="step enter" aria-labelledby="h-dlv">
+          <h2 className="h-main" id="h-dlv" style={{ fontSize: 22 }}>
+            商品をお届けしました
+          </h2>
+          <div className="card progress-card">
+            <div className="progress-title">お届け済み</div>
+            <p className="progress-desc">
+              お手元に商品は届きましたか？ 中身をご確認のうえ、下のボタンを押してください。
+              万一、届いていない・内容に気になる点がある場合は、そのまま担当者へご連絡ください。
+            </p>
+            <div className="step3-cta" style={{ marginTop: 18 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={confirmDelivery}
+                disabled={fbBusy}
+              >
+                {fbBusy ? '送信しています…' : '受け取りました'}
+              </button>
+            </div>
+            {publicId && (
+              <p className="note" style={{ marginTop: 14 }}>
+                相談番号: <span className="num">{publicId}</span>
+              </p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ---------- BI-4: 完了 + ひとことフィードバック ---------- */}
+      {step === 'feedback' && (
+        <section className="step enter" aria-labelledby="h-fb">
+          <div className="card done-hero">
+            <div className="done-check">
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            <h2 className="done-title" id="h-fb">
+              お受け取りありがとうございました。
+              <br />
+              今回の商品づくりはこれで完了です。
+            </h2>
+          </div>
+
+          <div className="card agr-card">
+            <h3>ひとことフィードバック（30秒で終わります）</h3>
+            <p className="note" style={{ marginTop: 0 }}>
+              次回をもっと良くするために、ひとことだけお聞かせください。
+            </p>
+
+            <div style={{ marginTop: 12 }}>
+              <span className="field-label" id="fb-star-label" style={{ marginTop: 0 }}>
+                今回のご満足度
+              </span>
+              <div className="star-rate" role="group" aria-labelledby="fb-star-label">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`star-btn${n <= fbRating ? ' on' : ''}`}
+                    aria-pressed={fbRating === n}
+                    aria-label={`星${n}つ${fbRating === n ? '（選択中）' : ''}`}
+                    onClick={() => setFbRating(n)}
+                  >
+                    <span aria-hidden="true">{n <= fbRating ? '★' : '☆'}</span>
+                  </button>
+                ))}
+                {fbRating > 0 && (
+                  <span className="star-value num" aria-live="polite">
+                    {fbRating} / 5
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <label className="field-label" htmlFor="fb-comment">
+              ひとこと（任意）
+            </label>
+            <textarea
+              id="fb-comment"
+              className="textarea-input"
+              value={fbComment}
+              onChange={(e) => setFbComment(e.target.value)}
+              placeholder="例）思ったより仕上がりが良かった。次は色違いも作ってみたい"
+            />
+
+            <label className="fb-check">
+              <input
+                type="checkbox"
+                checked={fbRepeat}
+                onChange={(e) => setFbRepeat(e.target.checked)}
+              />
+              <span>次の商品も相談したい（担当者からあらためてご連絡します）</span>
+            </label>
+
+            <div className="step3-cta" style={{ marginTop: 18 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={submitFeedback}
+                disabled={fbBusy}
+              >
+                {fbBusy ? '送信しています…' : 'この内容で送る'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={skipFeedback}
+                disabled={fbBusy}
+              >
+                今回は送らない
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ---------- BI-4: フィードバック送信後（リピート導線） ---------- */}
+      {step === 'feedback_done' && (
+        <section className="step enter" aria-labelledby="h-fb-done">
+          <div className="card done-hero">
+            <div className="done-check">
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            <h2 className="done-title" id="h-fb-done">
+              ありがとうございました。
+              <br />
+              またのご相談をお待ちしています。
+            </h2>
+            <div className="done-next">
+              <strong>次の商品づくりは、もっとかんたんです</strong>
+              新しい相談で「以前の商品をもう一度」を選ぶと、今回の内容を引き継いで、
+              色違い・数量違いなどの再注文をすぐに始められます。
+            </div>
+          </div>
+
+          <div className="step3-cta">
+            <button type="button" className="btn btn-primary" onClick={restartAsRepeat}>
+              以前の商品をもう一度（新しい相談へ）
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={restart}>
+              新しい相談を始める
+            </button>
+          </div>
+        </section>
+      )}
+
       <Toast msg={toastMsg} show={toastShow} />
     </>
   );
@@ -1668,6 +2349,76 @@ const FileSvg = (
     <path d="M14 2v6h6" />
   </svg>
 );
+
+/* ---------------- BI-4: 進捗カードの文言（内部情報なし） ---------------- */
+
+/** 日付文字列 → 「◯月◯日」。読めない場合はそのまま返す */
+function fmtMd(s?: string | null): string {
+  if (!s) return '';
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function progressCard(
+  state: string | null,
+  prog: ClientProgressSummary | null,
+): { title: string; desc: string; milestone?: string } {
+  const inspected = prog?.inspection;
+  const inspectionPassed =
+    inspected != null && (inspected.passed === true || inspected.result === 'PASS');
+  const passLine = inspectionPassed
+    ? inspected?.inspectedQty != null
+      ? `検品に合格しました（抜取n=${inspected.inspectedQty}）`
+      : '検品に合格しました'
+    : null;
+
+  if (state === 'PRODUCTION') {
+    const ed = prog?.production?.expectedDoneOn;
+    return {
+      title: ed ? `生産中（${fmtMd(ed)}ごろ完了予定）` : '生産中',
+      desc: '工場で生産を進めています。完了しだい、合意した品質基準どおりかを検品します。',
+    };
+  }
+  if (state === 'INSPECTION') {
+    if (passLine) {
+      return {
+        title: passLine,
+        desc: '合意した品質基準（量産合意書）どおりかを確認し、合格しました。このあと日本への輸送準備に進みます。',
+      };
+    }
+    return {
+      title: '検品を行っています',
+      desc: '合意した品質基準（量産合意書）どおりかを、1つずつ確認しています。',
+    };
+  }
+  if (state === 'SHIPPING') {
+    const sh = prog?.shipment;
+    if (sh?.status === 'CUSTOMS') {
+      return {
+        title: '通関手続き中',
+        desc: '日本へ輸入するための手続き（通関）を進めています。完了しだい、お届けの手配に入ります。',
+        ...(passLine ? { milestone: passLine } : {}),
+      };
+    }
+    if (sh?.status === 'ARRIVED_JP') {
+      return {
+        title: '日本に到着しました',
+        desc: 'まもなくお届けの手配に入ります。到着まで、いましばらくお待ちください。',
+        ...(passLine ? { milestone: passLine } : {}),
+      };
+    }
+    return {
+      title: sh?.eta ? `輸送中（到着予定${fmtMd(sh.eta)}）` : '輸送中',
+      desc: '検品に合格した商品を、日本へ輸送しています。',
+      ...(passLine ? { milestone: passLine } : {}),
+    };
+  }
+  return {
+    title: '担当者が進めています',
+    desc: '状況が変わると、この画面に表示されます。',
+  };
+}
 
 /* ---------------- BI-3: 決めることマップ ---------------- */
 

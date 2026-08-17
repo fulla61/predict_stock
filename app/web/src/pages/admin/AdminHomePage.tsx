@@ -8,7 +8,8 @@ import type {
   AdminClientListItem,
   AdminClientsResponse,
 } from '../../types';
-import type { AdminQueueResponseV3, CreateClientResponse } from '../../types-bi3';
+import type { CreateClientResponse } from '../../types-bi3';
+import type { AdminBi4QueueItem, AdminQueueResponseV4 } from '../../types-bi4';
 
 const RowArrow = (
   <svg
@@ -47,6 +48,25 @@ function fmtDate(s?: string | null): string {
   return Number.isNaN(d.getTime()) ? s : d.toLocaleString('ja-JP');
 }
 
+/** BI-4の新キュー配列を防御的にQueueRowへ変換（無い/欠けても壊れない） */
+function mapBi4Queue(
+  items: AdminBi4QueueItem[] | undefined,
+  keyPrefix: string,
+  build: (it: AdminBi4QueueItem) => { task: string; kind: string; urgent?: boolean },
+): QueueRow[] {
+  return (items ?? [])
+    .filter((it) => it && typeof it.projectId === 'number')
+    .map((it, i) => ({
+      key: `${keyPrefix}-${it.sampleId ?? it.inspectionId ?? it.projectId}-${i}`,
+      projectId: it.projectId,
+      publicId: it.publicId ?? '',
+      clientName: it.clientName ?? '',
+      title: it.title ?? '',
+      at: it.at ?? it.decidedAt ?? it.createdAt,
+      ...build(it),
+    }));
+}
+
 export default function AdminHomePage() {
   const navigate = useNavigate();
   const { setAiMode } = useAuth();
@@ -61,7 +81,7 @@ export default function AdminHomePage() {
     let cancelled = false;
 
     api
-      .get<AdminQueueResponseV3>('/admin/queue')
+      .get<AdminQueueResponseV4>('/admin/queue')
       .then((res) => {
         if (cancelled) return;
         const mode = res.items?.[0]?.aiMode ?? res.loops?.[0]?.aiMode;
@@ -128,6 +148,40 @@ export default function AdminHomePage() {
               urgent: true,
               at: it.decidedAt ?? it.createdAt,
             })),
+          /* ---- BI-4: サンプル/検品/受取確認/振り返り（バックエンドが提供する場合のみ・防御的） ---- */
+          ...mapBi4Queue(res.sampleReviews, 'smp', (it) =>
+            it.status === 'REJECTED'
+              ? {
+                  task: it.customerNote
+                    ? `お客様の修正希望: ${it.customerNote}`
+                    : 'サンプルの修正希望が届いています（次ラウンドの手配）',
+                  kind: 'サンプル修正希望',
+                  urgent: true,
+                }
+              : {
+                  task: 'サンプル: お客様の確認待ち',
+                  kind: 'サンプル確認待ち',
+                },
+          ),
+          ...mapBi4Queue(res.inspectionFails, 'insf', (it) => ({
+            task:
+              it.defectQty != null
+                ? `検品不合格（不良${it.defectQty}個）。対応を判断してください`
+                : '検品不合格。対応を判断してください',
+            kind: '検品不合格',
+            urgent: true,
+          })),
+          ...mapBi4Queue(res.deliveredAwaitingConfirm, 'dlv', () => ({
+            task: 'お届け済み。お客様の受取確認を待っています',
+            kind: '受取確認待ち',
+          })),
+          ...mapBi4Queue(res.feedbackArrived, 'fb', (it) => ({
+            task:
+              it.rating != null
+                ? `振り返りが届きました（星${it.rating}${it.askedRepeat ? '・次の商品も相談したい' : ''}）`
+                : '振り返り（フィードバック）が届きました',
+            kind: '振り返り着信',
+          })),
         ];
         setQueueRows(rows);
       })

@@ -37,10 +37,11 @@ export function nextFactoryPublicId(): string {
   return `FA-${String(n).padStart(4, '0')}`;
 }
 
-// {ProjectID}-RFQ-{NN} / -QT-{NN} / -LOOP-{NN} / -DOC-{NN} / -GS-{NN}（project単位で採番・再利用禁止）
+// {ProjectID}-RFQ-{NN} / -QT-{NN} / -LOOP-{NN} / -DOC-{NN} / -GS-{NN} /
+// -SMP-{NN} / -LOT-{NN} / -INS-{NN} / -SHP-{NN}（project単位で採番・再利用禁止）
 function nextProjectScopedId(
   projectPublicId: string,
-  typeCode: 'RFQ' | 'QT' | 'LOOP' | 'DOC' | 'GS'
+  typeCode: 'RFQ' | 'QT' | 'LOOP' | 'DOC' | 'GS' | 'SMP' | 'LOT' | 'INS' | 'SHP'
 ): string {
   const n = bump('PROJECT', projectPublicId, typeCode);
   return `${projectPublicId}-${typeCode}-${String(n).padStart(2, '0')}`;
@@ -63,4 +64,19 @@ export function nextDocumentPublicId(projectPublicId: string): string {
 }
 export function nextAgreementPublicId(projectPublicId: string): string {
   return nextProjectScopedId(projectPublicId, 'GS');
+}
+
+// ---- BI-4 ----
+
+export function nextSamplePublicId(projectPublicId: string): string {
+  return nextProjectScopedId(projectPublicId, 'SMP');
+}
+export function nextLotPublicId(projectPublicId: string): string {
+  return nextProjectScopedId(projectPublicId, 'LOT');
+}
+export function nextInspectionPublicId(projectPublicId: string): string {
+  return nextProjectScopedId(projectPublicId, 'INS');
+}
+export function nextShipmentPublicId(projectPublicId: string): string {
+  return nextProjectScopedId(projectPublicId, 'SHP');
 }

@@ -13,6 +13,7 @@ export interface ProjectRow {
   entry_route: 'IDEA' | 'PRODUCT' | 'SPEC' | 'REPEAT';
   ref_url: string | null;
   hide_initial_prices: number; // BI-3: 1なら顧客レスポンスから価格レンジを除外
+  feedback_json: string | null; // BI-4: 納品後フィードバック {rating, comment, askedRepeat, submittedAt}
   created_at: string;
 }
 
@@ -213,4 +214,53 @@ export function setProjectHideInitialPrices(projectId: number, hide: boolean): v
   db.prepare(
     `UPDATE projects SET hide_initial_prices = ?, updated_at = datetime('now') WHERE id = ?`
   ).run(hide ? 1 : 0, projectId);
+}
+
+// ============================================================
+// BI-4（CONTRACT-4）
+// ============================================================
+
+// BI-4の工程state。前進のみ（後戻りは自動では行わない。管理画面からの明示操作のみ）
+const BI4_STATE_RANK: Record<string, number> = {
+  SAMPLE: 1,
+  PRODUCTION: 2,
+  INSPECTION: 3,
+  SHIPPING: 4,
+  DELIVERED: 5,
+  COMPLETED: 6,
+};
+
+/** 指定アクションでの工程前進。現在stateが同等以上なら何もしない（後戻り禁止）。前進したらtrue */
+export function advanceProjectState(
+  projectId: number,
+  newState: keyof typeof BI4_STATE_RANK | string
+): boolean {
+  const current = db.prepare(`SELECT status FROM projects WHERE id = ?`).get(projectId) as
+    | { status: string }
+    | undefined;
+  if (!current) return false;
+  const currentRank = BI4_STATE_RANK[current.status] ?? 0;
+  const newRank = BI4_STATE_RANK[newState] ?? 0;
+  if (newRank === 0 || currentRank >= newRank) return false;
+  updateProjectStatus(projectId, newState);
+  return true;
+}
+
+// BI-4: 納品後フィードバック（新表を作らず projects.feedback_json に保存）
+export function setProjectFeedback(projectId: number, feedbackJson: string): void {
+  db.prepare(
+    `UPDATE projects SET feedback_json = ?, updated_at = datetime('now') WHERE id = ?`
+  ).run(feedbackJson, projectId);
+}
+
+// 判断キュー: フィードバック着信（feedback_jsonあり。recency判定はJSON内submittedAtで呼び出し側が実施）
+export function listProjectsWithFeedback(): (ProjectRow & { client_name: string })[] {
+  return db
+    .prepare(
+      `SELECT p.*, c.name AS client_name FROM projects p
+       JOIN clients c ON c.id = p.client_id
+       WHERE p.feedback_json IS NOT NULL
+       ORDER BY p.updated_at DESC`
+    )
+    .all() as never;
 }

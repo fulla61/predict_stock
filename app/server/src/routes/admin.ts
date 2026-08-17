@@ -23,11 +23,22 @@ import {
   listChangeRequestedAgreements,
   listPendingCustomerAgreements,
 } from '../repo/agreements.js';
-import { toLoopOptionStaffView, toOptionView, toUnderstandingView } from '../views.js';
+import {
+  listChangeRequestedSamples,
+  listCustomerReviewSamples,
+} from '../repo/samples.js';
+import {
+  listDeliveredAwaitingConfirm,
+  listOpenFailedInspections,
+} from '../repo/production.js';
+import { listProjectsWithFeedback } from '../repo/projects.js';
+import { toFeedbackView, toLoopOptionStaffView, toOptionView, toUnderstandingView } from '../views.js';
 import type {
   AdminActionResponse,
   AdminAgreementQueueItem,
-  AdminQueueResponseV3,
+  AdminFeedbackQueueItem,
+  AdminQueueResponseV4,
+  AdminSampleQueueItem,
   PricingModeResponse,
   ProposalOptionsPatchResponse,
 } from '../../../shared/api-types.js';
@@ -54,10 +65,51 @@ function toAgreementQueueItem(
   };
 }
 
+// BI-4: サンプルキュー行の整形（顧客待ち / 修正希望着信）
+function toSampleQueueItem(
+  s: ReturnType<typeof listCustomerReviewSamples>[number],
+  kind: AdminSampleQueueItem['kind']
+): AdminSampleQueueItem {
+  return {
+    sampleId: s.id,
+    samplePublicId: s.public_id,
+    projectId: s.project_id,
+    publicId: s.project_public_id,
+    clientName: s.client_name,
+    title: s.title,
+    roundNo: s.round_no,
+    status: s.status,
+    kind,
+    customerNote: s.customer_note,
+    decidedAt: s.decided_at,
+    createdAt: s.created_at,
+  };
+}
+
+// BI-4: フィードバック着信（直近14日）
+function listRecentFeedbackItems(): AdminFeedbackQueueItem[] {
+  const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+  const items: AdminFeedbackQueueItem[] = [];
+  for (const p of listProjectsWithFeedback()) {
+    const feedback = toFeedbackView(p.feedback_json);
+    if (!feedback) continue;
+    const at = Date.parse(feedback.submittedAt);
+    if (Number.isFinite(at) && at < cutoff) continue;
+    items.push({
+      projectId: p.id,
+      publicId: p.public_id,
+      clientName: p.client_name,
+      title: p.title,
+      feedback,
+    });
+  }
+  return items;
+}
+
 // ---- GET /api/admin/queue ----
 adminRouter.get('/admin/queue', requireAuth, requireStaff, (_req, res) => {
   const rows = listPendingProposals();
-  const body: AdminQueueResponseV3 = {
+  const body: AdminQueueResponseV4 = {
     items: rows.map((pr) => {
       const requirement = getLatestRequirement(pr.project_id);
       return {
@@ -99,6 +151,36 @@ adminRouter.get('/admin/queue', requireAuth, requireStaff, (_req, res) => {
     // BI-3: 量産合意書（顧客回答待ち + 顧客修正希望着信）
     agreementsPending: listPendingCustomerAgreements().map(toAgreementQueueItem),
     agreementChangeRequests: listChangeRequestedAgreements().map(toAgreementQueueItem),
+    // BI-4: サンプル（顧客待ち + 修正希望着信）/ 検品FAIL / 受取確認待ち / フィードバック着信
+    sampleReviews: [
+      ...listCustomerReviewSamples().map((s) => toSampleQueueItem(s, 'WAITING_CUSTOMER')),
+      ...listChangeRequestedSamples().map((s) => toSampleQueueItem(s, 'CHANGE_REQUESTED')),
+    ],
+    inspectionFails: listOpenFailedInspections().map((i) => ({
+      inspectionId: i.id,
+      inspectionPublicId: i.public_id,
+      lotId: i.lot_id,
+      lotPublicId: i.lot_public_id,
+      projectId: i.project_id,
+      publicId: i.project_public_id,
+      clientName: i.client_name,
+      title: i.title,
+      inspectedQty: i.inspected_qty,
+      defectQty: i.defect_qty,
+      defectNote: i.defect_note,
+      inspectedOn: i.inspected_on,
+      createdAt: i.created_at,
+    })),
+    deliveredAwaitingConfirm: listDeliveredAwaitingConfirm().map((s) => ({
+      shipmentId: s.id,
+      shipmentPublicId: s.public_id,
+      projectId: s.project_id,
+      publicId: s.project_public_id,
+      clientName: s.client_name,
+      title: s.title,
+      deliveredOn: s.delivered_on,
+    })),
+    feedbackArrived: listRecentFeedbackItems(),
   };
   res.json(body);
 });

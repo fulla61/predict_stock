@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, downloadText } from '../../lib/api';
+import { ApiError, api, downloadText } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { SourceChip, Toast, formatBytes, useToast } from '../../components/ui';
 import type {
@@ -24,10 +24,17 @@ import type {
   DocumentVisibility,
   DocumentsResponse,
   LimitSampleLabel,
-  ProjectViewStaffV3,
   VagueCheckResponse,
   VagueFinding,
 } from '../../types-bi3';
+import type {
+  CreateInspectionResponse,
+  InspectionResult,
+  ProjectViewStaffV4,
+  SampleView,
+  ShipmentMethod,
+  ShipmentView,
+} from '../../types-bi4';
 
 /* 工程: CONTRACT-2 / prototype準拠 */
 const STAGES = ['相談', '提案', '工場確認', 'サンプル', '生産', '検品', '輸入', '納品'];
@@ -62,20 +69,62 @@ const AG_STATUS: Record<string, { label: string; cls: string }> = {
   SUPERSEDED: { label: '旧版', cls: 'st-plain' },
 };
 
+/* ---- BI-4: 各工程ステータスの表示 ---- */
+const SMP_STATUS: Record<string, { label: string; cls: string }> = {
+  REQUESTED: { label: '依頼中', cls: 'st-plain' },
+  ARRIVED: { label: '到着', cls: 'st-stage' },
+  CUSTOMER_REVIEW: { label: 'お客様確認中', cls: 'st-warn' },
+  APPROVED: { label: '承認', cls: 'st-ok' },
+  REJECTED: { label: '修正希望', cls: 'st-alert' },
+};
+const LOT_STATUS: Record<string, { label: string; cls: string }> = {
+  PLANNED: { label: '計画', cls: 'st-plain' },
+  IN_PROGRESS: { label: '生産中', cls: 'st-warn' },
+  DONE: { label: '生産完了', cls: 'st-ok' },
+};
+const INS_RESULT: Record<string, { label: string; cls: string }> = {
+  PASS: { label: '合格', cls: 'st-ok' },
+  FAIL: { label: '不合格', cls: 'st-alert' },
+};
+const SHP_STATUS_FLOW: { value: string; label: string; cls: string }[] = [
+  { value: 'PREPARING', label: '出荷準備中', cls: 'st-plain' },
+  { value: 'SHIPPED', label: '輸送中', cls: 'st-stage' },
+  { value: 'CUSTOMS', label: '通関手続き中', cls: 'st-warn' },
+  { value: 'ARRIVED_JP', label: '日本到着', cls: 'st-stage' },
+  { value: 'DELIVERED', label: 'お届け済み', cls: 'st-ok' },
+];
+const SHP_METHOD: Record<string, string> = {
+  SEA: '船便',
+  AIR: '航空便',
+  COURIER: 'クーリエ（国際宅配便）',
+};
+/** projects.state（BI-4拡張値）→ 工程レールの位置 */
+const STATE_STAGE: Record<string, number> = {
+  SAMPLE: 3,
+  PRODUCTION: 4,
+  INSPECTION: 5,
+  SHIPPING: 6,
+  DELIVERED: 7,
+  COMPLETED: 7,
+};
+
+const G02_BLOCK_MSG =
+  '量産合意書の合意後に開始できます（G-02: 量産前の品質とりきめ）';
+
 export default function AdminProjectPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { setAiMode } = useAuth();
   const [toastMsg, toastShow, toast] = useToast();
 
-  const [project, setProject] = useState<ProjectViewStaffV3 | null>(null);
+  const [project, setProject] = useState<ProjectViewStaffV4 | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [factories, setFactories] = useState<FactoryView[] | null>(null);
   const [factoriesError, setFactoriesError] = useState<string | null>(null);
 
   const loadProject = useCallback(async () => {
     try {
-      const pj = await api.get<ProjectViewStaffV3>(`/projects/${id}`);
+      const pj = await api.get<ProjectViewStaffV4>(`/projects/${id}`);
       setProject(pj);
       setLoadError(null);
       if (pj.aiMode) setAiMode(pj.aiMode);
@@ -774,17 +823,292 @@ export default function AdminProjectPage() {
     }
   }
 
+  /* ================= BI-4: サンプル〜生産〜検品〜輸送〜納品後 ================= */
+
+  const samples = useMemo(() => project?.samples ?? [], [project]);
+  const lots = useMemo(() => project?.lots ?? [], [project]);
+  const inspections = useMemo(() => project?.inspections ?? [], [project]);
+  const shipments = useMemo(() => project?.shipments ?? [], [project]);
+  const imageDocs = useMemo(
+    () => (docs ?? []).filter((d) => d.mimeType?.startsWith('image/')),
+    [docs],
+  );
+  const agreementAgreed = agreement?.status === 'AGREED';
+  /** 合意した不良許容率（%）。未設定なら null */
+  const tolPct = useMemo(() => {
+    const tol = agreement?.tolerance ?? agreement?.toleranceJson;
+    return tol?.defectRatePct != null && tol.defectRatePct !== ''
+      ? String(tol.defectRatePct)
+      : null;
+  }, [agreement]);
+
+  /* ---- サンプル往復 ---- */
+  const [smpReqNote, setSmpReqNote] = useState('');
+  const [smpBusy, setSmpBusy] = useState(false);
+  /** 編集対象ラウンド（依頼中/到着のみ操作可）。写真とメモは編集中のみローカル保持 */
+  const activeSample =
+    samples.find((s) => s.status === 'REQUESTED' || s.status === 'ARRIVED') ?? null;
+  const [smpFactoryNote, setSmpFactoryNote] = useState('');
+  const [smpPhotoIds, setSmpPhotoIds] = useState<number[]>([]);
+  const activeSampleId = activeSample?.id ?? null;
+  useEffect(() => {
+    const s = activeSampleId != null ? samples.find((x) => x.id === activeSampleId) : null;
+    setSmpFactoryNote(s?.factoryNote ?? '');
+    setSmpPhotoIds(s?.photoDocIds ?? []);
+    // ラウンドが切り替わったときだけ初期化する
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSampleId]);
+
+  function toggleSmpPhoto(docId: number) {
+    setSmpPhotoIds((cur) =>
+      cur.includes(docId) ? cur.filter((x) => x !== docId) : [...cur, docId],
+    );
+  }
+
+  async function requestSample() {
+    if (smpBusy) return;
+    setSmpBusy(true);
+    try {
+      await api.post(`/admin/projects/${id}/samples`, {
+        ...(smpReqNote.trim() ? { requestNote: smpReqNote.trim() } : {}),
+      });
+      toast('サンプルを依頼として記録しました（新しいラウンド）。');
+      setSmpReqNote('');
+      await loadProject();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'サンプル依頼の記録に失敗しました。');
+    } finally {
+      setSmpBusy(false);
+    }
+  }
+
+  async function patchSample(s: SampleView, status: 'ARRIVED' | 'CUSTOMER_REVIEW') {
+    if (smpBusy) return;
+    if (status === 'CUSTOMER_REVIEW' && smpPhotoIds.length === 0) {
+      toast('お客様に見せる写真を1枚以上選んでください（資料から選択）。');
+      return;
+    }
+    setSmpBusy(true);
+    try {
+      await api.patch(`/admin/samples/${s.id}`, {
+        status,
+        ...(smpFactoryNote.trim() ? { factoryNote: smpFactoryNote.trim() } : {}),
+        ...(smpPhotoIds.length > 0 ? { photoDocIds: smpPhotoIds } : {}),
+      });
+      toast(
+        status === 'ARRIVED'
+          ? '到着を登録しました。写真を選んで「お客様へ確認を依頼」を押してください。'
+          : 'お客様へ確認を依頼しました。お客様の画面にサンプル写真が表示されます。',
+      );
+      await loadProject();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'サンプルの更新に失敗しました。');
+    } finally {
+      setSmpBusy(false);
+    }
+  }
+
+  /* ---- 生産ロット（G-02ハードゲート） ---- */
+  const [lotQty, setLotQty] = useState('');
+  const [lotExpected, setLotExpected] = useState('');
+  const [lotNote, setLotNote] = useState('');
+  const [lotBusy, setLotBusy] = useState(false);
+
+  async function createLot() {
+    if (lotBusy) return;
+    if (!lotQty || Number(lotQty) <= 0) {
+      toast('生産数量をご入力ください。');
+      return;
+    }
+    setLotBusy(true);
+    try {
+      await api.post(`/admin/projects/${id}/lots`, {
+        qty: Number(lotQty),
+        ...(lotExpected ? { expectedDoneOn: lotExpected } : {}),
+        ...(lotNote.trim() ? { note: lotNote.trim() } : {}),
+      });
+      toast('生産ロットを作成しました。工程は「生産」に進みます。');
+      setLotQty('');
+      setLotExpected('');
+      setLotNote('');
+      await loadProject();
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'G02_NOT_AGREED') {
+        toast(G02_BLOCK_MSG);
+      } else {
+        toast(e instanceof Error ? e.message : '生産ロットの作成に失敗しました。');
+      }
+    } finally {
+      setLotBusy(false);
+    }
+  }
+
+  async function updateLotStatus(lotId: number, status: 'IN_PROGRESS' | 'DONE') {
+    if (lotBusy) return;
+    setLotBusy(true);
+    try {
+      await api.patch(`/admin/lots/${lotId}`, { status });
+      toast(status === 'IN_PROGRESS' ? '生産を開始しました。' : 'ロットを生産完了にしました。');
+      await loadProject();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'ロットの更新に失敗しました。');
+    } finally {
+      setLotBusy(false);
+    }
+  }
+
+  /* ---- 検品（許容率突合） ---- */
+  const [insLotId, setInsLotId] = useState<number | ''>('');
+  const [insResult, setInsResult] = useState<InspectionResult>('PASS');
+  const [insQty, setInsQty] = useState('');
+  const [insDefects, setInsDefects] = useState('0');
+  const [insDefectNote, setInsDefectNote] = useState('');
+  const [insDate, setInsDate] = useState('');
+  const [insPhotoIds, setInsPhotoIds] = useState<number[]>([]);
+  const [insBusy, setInsBusy] = useState(false);
+  const [overTolWarn, setOverTolWarn] = useState(false);
+
+  useEffect(() => {
+    if (insLotId === '' && lots.length > 0) setInsLotId(lots[lots.length - 1].id);
+  }, [lots, insLotId]);
+
+  function toggleInsPhoto(docId: number) {
+    setInsPhotoIds((cur) =>
+      cur.includes(docId) ? cur.filter((x) => x !== docId) : [...cur, docId],
+    );
+  }
+
+  async function submitInspection() {
+    if (insBusy) return;
+    if (insLotId === '') {
+      toast('検品対象のロットを選んでください。');
+      return;
+    }
+    if (!insQty || !insDate) {
+      toast('検品数量と検品日をご入力ください。');
+      return;
+    }
+    setInsBusy(true);
+    try {
+      const res = await api.post<CreateInspectionResponse>(
+        `/admin/lots/${insLotId}/inspections`,
+        {
+          result: insResult,
+          inspectedQty: Number(insQty),
+          defectQty: Number(insDefects || 0),
+          ...(insDefectNote.trim() ? { defectNote: insDefectNote.trim() } : {}),
+          ...(insPhotoIds.length > 0 ? { photoDocIds: insPhotoIds } : {}),
+          inspectedOn: insDate,
+        },
+      );
+      const over = Boolean(res?.overTolerance ?? res?.inspection?.overTolerance);
+      setOverTolWarn(over);
+      toast(
+        over
+          ? '検品を記録しました。不良率が合意した許容を超えています。'
+          : '検品を記録しました。',
+      );
+      setInsQty('');
+      setInsDefects('0');
+      setInsDefectNote('');
+      setInsPhotoIds([]);
+      await loadProject();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '検品の記録に失敗しました。');
+    } finally {
+      setInsBusy(false);
+    }
+  }
+
+  /* ---- 輸送・輸入 ---- */
+  const [shpMethod, setShpMethod] = useState<ShipmentMethod>('SEA');
+  const [shpLotId, setShpLotId] = useState<number | ''>('');
+  const [shpEtd, setShpEtd] = useState('');
+  const [shpEta, setShpEta] = useState('');
+  const [shpDest, setShpDest] = useState('');
+  const [shpTrack, setShpTrack] = useState('');
+  const [shpBusy, setShpBusy] = useState(false);
+
+  async function createShipment() {
+    if (shpBusy) return;
+    setShpBusy(true);
+    try {
+      await api.post(`/admin/projects/${id}/shipments`, {
+        method: shpMethod,
+        ...(shpLotId !== '' ? { lotId: Number(shpLotId) } : {}),
+        ...(shpEtd ? { etd: shpEtd } : {}),
+        ...(shpEta ? { eta: shpEta } : {}),
+        ...(shpDest.trim() ? { destinationNote: shpDest.trim() } : {}),
+        ...(shpTrack.trim() ? { trackingNote: shpTrack.trim() } : {}),
+      });
+      toast('輸送を登録しました。工程は「輸入」に進みます。');
+      setShpEtd('');
+      setShpEta('');
+      setShpDest('');
+      setShpTrack('');
+      await loadProject();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '輸送の登録に失敗しました。');
+    } finally {
+      setShpBusy(false);
+    }
+  }
+
+  async function advanceShipment(sh: ShipmentView) {
+    if (shpBusy) return;
+    const flowIdx = SHP_STATUS_FLOW.findIndex((s) => s.value === sh.status);
+    const next = SHP_STATUS_FLOW[flowIdx + 1];
+    if (!next) return;
+    setShpBusy(true);
+    try {
+      await api.patch(`/admin/shipments/${sh.id}`, {
+        status: next.value,
+        ...(next.value === 'DELIVERED'
+          ? { deliveredOn: new Date().toISOString().slice(0, 10) }
+          : {}),
+      });
+      toast(
+        next.value === 'DELIVERED'
+          ? 'お届け済みにしました。お客様の画面に受取確認のご案内が表示されます。'
+          : `輸送ステータスを「${next.label}」にしました。`,
+      );
+      await loadProject();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '輸送ステータスの更新に失敗しました。');
+    } finally {
+      setShpBusy(false);
+    }
+  }
+
   /* ---------------- 工程インデックス推定 ---------------- */
   const stageIdx = useMemo(() => {
     if (!project) return 0;
+    /* BI-4: 案件stateが新値を返す場合はそれを最優先 */
+    const st4 = project.state != null ? STATE_STAGE[project.state] : undefined;
+    if (st4 != null) return st4;
+    /* BI-4: state未対応バックエンドでもデータの存在から前進を推定 */
+    if (shipments.length > 0) return 6; // 輸入
+    if (inspections.length > 0) return 5; // 検品
+    if (lots.length > 0) return 4; // 生産
     /* BI-3: 量産合意書の進み具合を優先して反映 */
     if (agreement?.status === 'AGREED') return 4; // 生産
+    if (samples.length > 0) return 3; // サンプル
     if (agreement) return 3; // サンプル（合意書の作成・確認中）
     if (loops.length > 0 || quotes.length > 0 || rfqs.length > 0) return 2; // 工場確認
     const st = project.proposal.state;
     if (st === 'none' || st === 'PENDING_APPROVAL' || st === 'REVISION_REQUESTED') return 0;
     return 1; // 提案
-  }, [project, agreement, loops.length, quotes.length, rfqs.length]);
+  }, [
+    project,
+    agreement,
+    loops.length,
+    quotes.length,
+    rfqs.length,
+    samples.length,
+    lots.length,
+    inspections.length,
+    shipments.length,
+  ]);
 
   /* ================= render ================= */
 
@@ -855,8 +1179,14 @@ export default function AdminProjectPage() {
         <div style={{ padding: '0 22px 18px' }}>
           <div className="state-line">
             <span className="k">現在の工程</span>
-            <span>
-              <span className="chip-state st-stage">{STAGES[stageIdx]}</span>
+            <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <span className="chip-state st-stage">{STAGES[stageIdx] ?? '納品'}</span>
+              {project.state === 'DELIVERED' && (
+                <span className="chip-state st-warn">お客様の受取確認待ち</span>
+              )}
+              {project.state === 'COMPLETED' && (
+                <span className="chip-state st-ok">完了（受取確認済み）</span>
+              )}
             </span>
           </div>
           <div className="state-line">
@@ -2071,7 +2401,678 @@ export default function AdminProjectPage() {
         )}
       </div>
 
+      {/* ============ BI-4: サンプル往復 ============ */}
+      <div className="card case-section">
+        <h3>サンプル（量産前の見本の往復）</h3>
+        <p className="sub">
+          工場へのサンプル依頼→到着→写真登録→お客様確認、の往復をラウンド単位で記録します。
+          お客様には「お客様へ確認を依頼」した写真だけが表示され、工場名・社内メモは表示されません。
+        </p>
+
+        {samples.length === 0 && (
+          <div className="empty-note" style={{ padding: '6px 0' }}>
+            まだサンプルの依頼がありません。
+          </div>
+        )}
+
+        {samples.map((s) => {
+          const st = SMP_STATUS[s.status ?? ''] ?? { label: s.status ?? '—', cls: 'st-plain' };
+          const editable = s.status === 'REQUESTED' || s.status === 'ARRIVED';
+          return (
+            <div className="round-item" key={s.id}>
+              <div className="head" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <strong className="num">{s.publicId || `SMP-${s.id}`}</strong>
+                {s.roundNo != null && (
+                  <span className="row-sub" style={{ margin: 0 }}>
+                    {s.roundNo}回目
+                  </span>
+                )}
+                <span className={`chip-state ${st.cls}`}>{st.label}</span>
+                {s.createdAt && <span className="row-meta num">{fmtDate(s.createdAt)}</span>}
+              </div>
+
+              {s.requestNote && (
+                <div className="state-line">
+                  <span className="k">依頼メモ</span>
+                  <span style={{ whiteSpace: 'pre-wrap' }}>{s.requestNote}</span>
+                </div>
+              )}
+
+              {s.status === 'REJECTED' && s.customerNote && (
+                <div className="modify-note-box" style={{ background: 'var(--alert-soft)', borderColor: 'rgba(176, 82, 75, 0.35)' }}>
+                  <strong>お客様から修正のご希望が届いています。</strong>
+                  <br />「{s.customerNote}」
+                  <br />
+                  工場と調整のうえ、下の「サンプルを依頼」で次のラウンドを作成してください。
+                </div>
+              )}
+              {s.status === 'APPROVED' && (
+                <div className="state-line">
+                  <span className="k">お客様の決定</span>
+                  <span>
+                    この見本で進める（承認）
+                    {s.decidedAt && <span className="num">　{fmtDate(s.decidedAt)}</span>}
+                    <span className="row-sub" style={{ display: 'block', margin: 0 }}>
+                      承認写真は、量産合意書の「承認サンプル写真」の候補になります（自動設定はされません）。
+                    </span>
+                  </span>
+                </div>
+              )}
+
+              {(s.photoDocIds ?? []).length > 0 && !editable && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                  {(s.photoDocIds ?? []).map((docId) => (
+                    <a key={docId} href={`/api/documents/${docId}/file`} target="_blank" rel="noreferrer">
+                      <img
+                        src={`/api/documents/${docId}/file`}
+                        alt=""
+                        style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)', display: 'block' }}
+                      />
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {editable && (
+                <div style={{ marginTop: 10 }}>
+                  <div className="form-field">
+                    <label htmlFor={`smp-fnote-${s.id}`}>工場メモ（社内のみ・お客様には表示されません）</label>
+                    <input
+                      id={`smp-fnote-${s.id}`}
+                      className="text-input"
+                      value={smpFactoryNote}
+                      onChange={(e) => setSmpFactoryNote(e.target.value)}
+                      placeholder="例）2/14発送済み、順豊 SF123。ロゴ位置は修正済みとのこと"
+                    />
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--sub)', margin: '10px 0 6px' }}>
+                    お客様に見せる写真（資料から複数選択）
+                  </div>
+                  <PhotoPick
+                    docs={imageDocs}
+                    selected={smpPhotoIds}
+                    onToggle={toggleSmpPhoto}
+                    label="サンプル写真の選択"
+                  />
+                  <div className="form-actions">
+                    {s.status === 'REQUESTED' && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => patchSample(s, 'ARRIVED')}
+                        disabled={smpBusy}
+                      >
+                        到着を登録
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => patchSample(s, 'CUSTOMER_REVIEW')}
+                      disabled={smpBusy}
+                    >
+                      {smpBusy ? '送信しています…' : 'お客様へ確認を依頼'}
+                    </button>
+                    <span className="row-sub" style={{ margin: 0 }}>
+                      選択中の写真 {smpPhotoIds.length} 枚
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {!activeSample && (
+          <div style={{ marginTop: 12 }}>
+            <div className="form-field">
+              <label htmlFor="smp-req">依頼メモ（任意・工場への依頼内容の控え）</label>
+              <input
+                id="smp-req"
+                className="text-input"
+                value={smpReqNote}
+                onChange={(e) => setSmpReqNote(e.target.value)}
+                placeholder="例）ロゴ色を明るい青に変更した再サンプルを1個"
+              />
+            </div>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={requestSample}
+                disabled={smpBusy}
+              >
+                {smpBusy ? '記録しています…' : 'サンプルを依頼'}
+              </button>
+              <span className="row-sub" style={{ margin: 0 }}>
+                新しいラウンド（SMP番号）が作成され、工程は「サンプル」に進みます。
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ============ BI-4: 生産ロット（G-02ハードゲート） ============ */}
+      <div className="card case-section">
+        <h3>生産ロット</h3>
+        <p className="sub">
+          量産の単位（ロット）を記録します。量産合意書（G-02）にお客様が合意するまでは開始できません。
+        </p>
+
+        {lots.map((l) => {
+          const st = LOT_STATUS[l.status ?? ''] ?? { label: l.status ?? '—', cls: 'st-plain' };
+          return (
+            <div className="state-line" key={l.id}>
+              <span className="k num">{l.publicId || `LOT-${l.id}`}</span>
+              <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span className={`chip-state ${st.cls}`}>{st.label}</span>
+                {l.qty != null && <span className="num">{l.qty.toLocaleString()}個</span>}
+                {l.expectedDoneOn && (
+                  <span className="row-sub" style={{ margin: 0 }}>
+                    完了予定 <span className="num">{l.expectedDoneOn}</span>
+                  </span>
+                )}
+                {l.note && (
+                  <span className="row-sub" style={{ margin: 0 }}>
+                    {l.note}
+                  </span>
+                )}
+                {l.status === 'PLANNED' && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => updateLotStatus(l.id, 'IN_PROGRESS')}
+                    disabled={lotBusy}
+                  >
+                    生産中にする
+                  </button>
+                )}
+                {l.status === 'IN_PROGRESS' && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => updateLotStatus(l.id, 'DONE')}
+                    disabled={lotBusy}
+                  >
+                    生産完了にする
+                  </button>
+                )}
+              </span>
+            </div>
+          );
+        })}
+
+        <div className="form-grid" style={{ marginTop: 12 }}>
+          <div className="form-field">
+            <label htmlFor="lot-qty">生産数量（必須）</label>
+            <input
+              id="lot-qty"
+              className="text-input num"
+              type="number"
+              min="1"
+              value={lotQty}
+              onChange={(e) => setLotQty(e.target.value)}
+              placeholder="例）1000"
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="lot-exp">完了予定日</label>
+            <input
+              id="lot-exp"
+              className="text-input"
+              type="date"
+              value={lotExpected}
+              onChange={(e) => setLotExpected(e.target.value)}
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="lot-note">メモ</label>
+            <input
+              id="lot-note"
+              className="text-input"
+              value={lotNote}
+              onChange={(e) => setLotNote(e.target.value)}
+              placeholder="例）初回量産。予備20個込み"
+            />
+          </div>
+        </div>
+        <div className="form-actions">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={createLot}
+            disabled={lotBusy || !agreementAgreed}
+          >
+            {lotBusy ? '記録しています…' : '生産を開始'}
+          </button>
+          {!agreementAgreed && (
+            <span className="row-sub" style={{ margin: 0, color: 'var(--warn)' }}>
+              {G02_BLOCK_MSG}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ============ BI-4: 検品 ============ */}
+      <div className="card case-section">
+        <h3>検品（合意した基準との突合）</h3>
+        <p className="sub">
+          ロットごとの検品結果を記録します。不良数が量産合意書の許容率を超えると警告が表示されます
+          （対応の判断は人が行います）。お客様には「合格しました（抜取n=◯）」のみが伝わります。
+        </p>
+
+        {overTolWarn && (
+          <div className="over-tol-banner" role="alert">
+            不良率が合意した許容（{tolPct != null ? `${tolPct}%` : '未設定'}
+            ）を超えています。対応を判断してください。
+          </div>
+        )}
+
+        {inspections.map((ins) => {
+          const rs = INS_RESULT[ins.result ?? ''] ?? { label: ins.result ?? '—', cls: 'st-plain' };
+          const lot = lots.find((l) => l.id === ins.lotId);
+          return (
+            <div className="state-line" key={ins.id}>
+              <span className="k num">{ins.publicId || `INS-${ins.id}`}</span>
+              <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span className={`chip-state ${rs.cls}`}>{rs.label}</span>
+                {lot && <span className="num">{lot.publicId || `LOT-${lot.id}`}</span>}
+                {ins.inspectedQty != null && (
+                  <span className="num">検品{ins.inspectedQty}個</span>
+                )}
+                {ins.defectQty != null && <span className="num">不良{ins.defectQty}個</span>}
+                {ins.overTolerance && (
+                  <span className="chip-state st-alert">許容率超過</span>
+                )}
+                {ins.inspectedOn && <span className="row-meta num">{ins.inspectedOn}</span>}
+                {ins.defectNote && (
+                  <span className="row-sub" style={{ margin: 0 }}>
+                    {ins.defectNote}
+                  </span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+        {inspections.length === 0 && (
+          <div className="empty-note" style={{ padding: '6px 0' }}>
+            まだ検品の記録がありません。
+          </div>
+        )}
+
+        {lots.length === 0 ? (
+          <div className="empty-note" style={{ padding: '6px 0' }}>
+            検品は生産ロットの作成後に記録できます。
+          </div>
+        ) : (
+          <>
+            <div className="form-grid" style={{ marginTop: 12 }}>
+              <div className="form-field">
+                <label htmlFor="ins-lot">対象ロット</label>
+                <select
+                  id="ins-lot"
+                  className="select-input"
+                  value={insLotId}
+                  onChange={(e) =>
+                    setInsLotId(e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                >
+                  {lots.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.publicId || `LOT-${l.id}`}
+                      {l.qty != null ? `（${l.qty}個）` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-field">
+                <label htmlFor="ins-result">結果</label>
+                <select
+                  id="ins-result"
+                  className="select-input"
+                  value={insResult}
+                  onChange={(e) => setInsResult(e.target.value as InspectionResult)}
+                >
+                  <option value="PASS">合格（PASS）</option>
+                  <option value="FAIL">不合格（FAIL）</option>
+                </select>
+              </div>
+              <div className="form-field">
+                <label htmlFor="ins-qty">検品数量（必須）</label>
+                <input
+                  id="ins-qty"
+                  className="text-input num"
+                  type="number"
+                  min="1"
+                  value={insQty}
+                  onChange={(e) => setInsQty(e.target.value)}
+                  placeholder="例）50（抜取）"
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="ins-def">不良数</label>
+                <input
+                  id="ins-def"
+                  className="text-input num"
+                  type="number"
+                  min="0"
+                  value={insDefects}
+                  onChange={(e) => setInsDefects(e.target.value)}
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="ins-date">検品日（必須）</label>
+                <input
+                  id="ins-date"
+                  className="text-input"
+                  type="date"
+                  value={insDate}
+                  onChange={(e) => setInsDate(e.target.value)}
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="ins-note">不良の内容メモ</label>
+                <input
+                  id="ins-note"
+                  className="text-input"
+                  value={insDefectNote}
+                  onChange={(e) => setInsDefectNote(e.target.value)}
+                  placeholder="例）ロゴかすれ2個、キズ1個"
+                />
+              </div>
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--sub)', margin: '10px 0 6px' }}>
+              検品写真（資料から複数選択・任意）
+            </div>
+            <PhotoPick
+              docs={imageDocs}
+              selected={insPhotoIds}
+              onToggle={toggleInsPhoto}
+              label="検品写真の選択"
+            />
+            <div className="form-actions">
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={submitInspection}
+                disabled={insBusy}
+              >
+                {insBusy ? '記録しています…' : '検品結果を記録'}
+              </button>
+              <span className="row-sub" style={{ margin: 0 }}>
+                FAILの場合も記録して残し、対応後に新しい検品行として再記録します。
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ============ BI-4: 輸送・輸入 ============ */}
+      <div className="card case-section">
+        <h3>輸送・輸入</h3>
+        <p className="sub">
+          船便・航空便・クーリエの別と予定日を記録し、ステータスを進めます。
+          「お届け済み」にすると、お客様の画面に受取確認のご案内が表示されます。
+        </p>
+
+        {shipments.map((sh) => {
+          const flowIdx = SHP_STATUS_FLOW.findIndex((x) => x.value === sh.status);
+          const st = SHP_STATUS_FLOW[flowIdx] ?? {
+            label: sh.status ?? '—',
+            cls: 'st-plain',
+            value: '',
+          };
+          const next = flowIdx >= 0 ? SHP_STATUS_FLOW[flowIdx + 1] : undefined;
+          return (
+            <div className="round-item" key={sh.id}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <strong className="num">{sh.publicId || `SHP-${sh.id}`}</strong>
+                <span className={`chip-state ${st.cls}`}>{st.label}</span>
+                <span className="row-sub" style={{ margin: 0 }}>
+                  {SHP_METHOD[sh.method ?? ''] ?? sh.method ?? ''}
+                </span>
+                {sh.etd && (
+                  <span className="row-sub num" style={{ margin: 0 }}>
+                    出発 {sh.etd}
+                  </span>
+                )}
+                {sh.eta && (
+                  <span className="row-sub num" style={{ margin: 0 }}>
+                    到着予定 {sh.eta}
+                  </span>
+                )}
+                {sh.deliveredOn && (
+                  <span className="row-sub num" style={{ margin: 0 }}>
+                    お届け {sh.deliveredOn}
+                  </span>
+                )}
+                {next && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => advanceShipment(sh)}
+                    disabled={shpBusy}
+                  >
+                    「{next.label}」にする
+                  </button>
+                )}
+              </div>
+              {/* ステータスの小さなステッパー */}
+              <div className="ship-steps" aria-hidden="true">
+                {SHP_STATUS_FLOW.map((x, i) => (
+                  <span
+                    key={x.value}
+                    className={`ship-step${i < flowIdx ? ' done' : i === flowIdx ? ' now' : ''}`}
+                  >
+                    {x.label}
+                  </span>
+                ))}
+              </div>
+              {(sh.destinationNote || sh.trackingNote) && (
+                <div className="row-sub" style={{ marginTop: 6 }}>
+                  {[sh.destinationNote, sh.trackingNote].filter(Boolean).join(' ・ ')}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {shipments.length === 0 && (
+          <div className="empty-note" style={{ padding: '6px 0' }}>
+            まだ輸送の登録がありません。
+          </div>
+        )}
+
+        <div className="form-grid" style={{ marginTop: 12 }}>
+          <div className="form-field">
+            <label htmlFor="shp-method">輸送手段</label>
+            <select
+              id="shp-method"
+              className="select-input"
+              value={shpMethod}
+              onChange={(e) => setShpMethod(e.target.value as ShipmentMethod)}
+            >
+              <option value="SEA">船便</option>
+              <option value="AIR">航空便</option>
+              <option value="COURIER">クーリエ（国際宅配便）</option>
+            </select>
+          </div>
+          {lots.length > 0 && (
+            <div className="form-field">
+              <label htmlFor="shp-lot">対象ロット（任意）</label>
+              <select
+                id="shp-lot"
+                className="select-input"
+                value={shpLotId}
+                onChange={(e) =>
+                  setShpLotId(e.target.value === '' ? '' : Number(e.target.value))
+                }
+              >
+                <option value="">指定しない</option>
+                {lots.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.publicId || `LOT-${l.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="form-field">
+            <label htmlFor="shp-etd">出発予定日（ETD）</label>
+            <input
+              id="shp-etd"
+              className="text-input"
+              type="date"
+              value={shpEtd}
+              onChange={(e) => setShpEtd(e.target.value)}
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="shp-eta">到着予定日（ETA）</label>
+            <input
+              id="shp-eta"
+              className="text-input"
+              type="date"
+              value={shpEta}
+              onChange={(e) => setShpEta(e.target.value)}
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="shp-dest">お届け先メモ</label>
+            <input
+              id="shp-dest"
+              className="text-input"
+              value={shpDest}
+              onChange={(e) => setShpDest(e.target.value)}
+              placeholder="例）お客様指定の倉庫（東京・平和島）"
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="shp-track">追跡メモ（B/L・追跡番号など）</label>
+            <input
+              id="shp-track"
+              className="text-input"
+              value={shpTrack}
+              onChange={(e) => setShpTrack(e.target.value)}
+              placeholder="例）B/L: ONEYSHA1234567"
+            />
+          </div>
+        </div>
+        <div className="form-actions">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={createShipment}
+            disabled={shpBusy}
+          >
+            {shpBusy ? '登録しています…' : '輸送を登録'}
+          </button>
+        </div>
+      </div>
+
+      {/* ============ BI-4: 納品後（お客様の振り返り） ============ */}
+      {(project.feedback?.rating != null ||
+        project.state === 'DELIVERED' ||
+        project.state === 'COMPLETED') && (
+        <div className="card case-section">
+          <h3>納品後（お客様の受け取りと振り返り）</h3>
+          {project.state === 'DELIVERED' && (
+            <p className="sub">お客様の「受け取りました」の確認を待っています。</p>
+          )}
+          {project.state === 'COMPLETED' && (
+            <div className="state-line">
+              <span className="k">受取確認</span>
+              <span>
+                <span className="chip-state st-ok">確認済み（案件は完了）</span>
+                {project.deliveryConfirmedAt && (
+                  <span className="num" style={{ marginLeft: 8 }}>
+                    {fmtDate(project.deliveryConfirmedAt)}
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+          {project.feedback?.rating != null ? (
+            <>
+              <div className="state-line">
+                <span className="k">満足度</span>
+                <span>
+                  <span className="fb-stars" aria-label={`星${project.feedback.rating}つ（5段階）`}>
+                    {'★'.repeat(Math.max(0, Math.min(5, project.feedback.rating)))}
+                    {'☆'.repeat(5 - Math.max(0, Math.min(5, project.feedback.rating)))}
+                  </span>
+                  <span className="num" style={{ marginLeft: 8 }}>
+                    {project.feedback.rating} / 5
+                  </span>
+                  {project.feedback.askedRepeat && (
+                    <span className="chip-state st-ok" style={{ marginLeft: 8 }}>
+                      次の商品も相談したい
+                    </span>
+                  )}
+                </span>
+              </div>
+              {project.feedback.comment && (
+                <div className="state-line">
+                  <span className="k">ひとこと</span>
+                  <span style={{ whiteSpace: 'pre-wrap' }}>{project.feedback.comment}</span>
+                </div>
+              )}
+              {project.feedback.askedRepeat && (
+                <p className="sub" style={{ marginTop: 10 }}>
+                  リピートのご希望があります。次のご相談のご案内（P-13）につなげてください。
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="empty-note" style={{ padding: '6px 0' }}>
+              お客様からの振り返り（ひとことフィードバック）はまだ届いていません。
+            </div>
+          )}
+        </div>
+      )}
+
       <Toast msg={toastMsg} show={toastShow} />
     </section>
+  );
+}
+
+/* ---------------- BI-4: 写真の複数選択（資料の画像から） ---------------- */
+
+function PhotoPick({
+  docs,
+  selected,
+  onToggle,
+  label,
+}: {
+  docs: DocumentView[];
+  selected: number[];
+  onToggle: (docId: number) => void;
+  label: string;
+}) {
+  if (docs.length === 0) {
+    return (
+      <div className="empty-note" style={{ padding: '4px 0' }}>
+        画像の資料がまだありません。上の「資料」セクションから写真をアップロードしてください。
+      </div>
+    );
+  }
+  return (
+    <div className="photo-pick" role="group" aria-label={label}>
+      {docs.map((d) => {
+        const name = d.title || d.fileName || `資料 #${d.id}`;
+        const on = selected.includes(d.id);
+        return (
+          <label key={d.id} className={`photo-pick-item${on ? ' on' : ''}`}>
+            <input
+              type="checkbox"
+              checked={on}
+              onChange={() => onToggle(d.id)}
+              aria-label={`${name} を${on ? '外す' : '選ぶ'}`}
+            />
+            <img src={`/api/documents/${d.id}/file`} alt="" />
+            <span className="photo-pick-name">{name}</span>
+          </label>
+        );
+      })}
+    </div>
   );
 }

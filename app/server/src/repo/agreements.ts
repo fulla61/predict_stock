@@ -92,6 +92,17 @@ export function getLatestVisibleAgreementForClient(projectId: number): Agreement
     .get(projectId) as AgreementRow | undefined;
 }
 
+// BI-4 G-02ハードゲート用: 当該案件のAGREED合意書（最新）。無ければ生産ロット開始不可
+export function getAgreedAgreement(projectId: number): AgreementRow | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM production_agreements
+       WHERE project_id = ? AND status = 'AGREED'
+       ORDER BY id DESC LIMIT 1`
+    )
+    .get(projectId) as AgreementRow | undefined;
+}
+
 export function listAgreementsForProject(projectId: number): AgreementRow[] {
   return db
     .prepare(`SELECT * FROM production_agreements WHERE project_id = ? ORDER BY id`)

@@ -15,6 +15,8 @@ import { rfqsRouter } from './routes/rfqs.js';
 import { loopsRouter } from './routes/loops.js';
 import { documentsRouter } from './routes/documents.js';
 import { agreementsRouter } from './routes/agreements.js';
+import { samplesRouter } from './routes/samples.js';
+import { productionRouter } from './routes/production.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -38,6 +40,9 @@ app.use('/api', loopsRouter);
 // BI-3: ファイルは静的配信せず、必ず認証+テナント確認付きAPI経由（documentsRouter）
 app.use('/api', documentsRouter);
 app.use('/api', agreementsRouter);
+// BI-4: サンプル往復 + 生産ロット・検品・輸送・納品確認・フィードバック
+app.use('/api', samplesRouter);
+app.use('/api', productionRouter);
 
 // web/dist があれば静的配信（無くてもAPIは動く）
 if (fs.existsSync(config.webDist)) {

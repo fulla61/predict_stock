@@ -20,6 +20,13 @@ import type {
   QuoteView,
   RfqView,
   UnderstandingField,
+  FeedbackView,
+  InspectionView,
+  LotView,
+  ProgressSummaryClient,
+  SampleClientView,
+  SampleStaffView,
+  ShipmentView,
 } from '../../shared/api-types.js';
 import type { SpecFieldRow, QuestionRow } from './repo/projects.js';
 import type { ProposalRow, ProposalOptionRow } from './repo/proposals.js';
@@ -28,6 +35,8 @@ import type { LoopOptionRow, LoopRow } from './repo/loops.js';
 import type { QuoteConditionRow, QuoteRow, RfqRow } from './repo/rfqs.js';
 import type { DocumentWithUploader } from './repo/documents.js';
 import type { AgreementRow } from './repo/agreements.js';
+import type { SampleRow } from './repo/samples.js';
+import type { InspectionRow, LotRow, ShipmentRow } from './repo/production.js';
 
 export function toUnderstandingView(rows: SpecFieldRow[]): UnderstandingField[] {
   return rows.map((r) => ({
@@ -268,5 +277,173 @@ export function toAgreementStaffView(row: AgreementRow): AgreementStaffView {
     ...toAgreementClientView(row),
     projectId: row.project_id,
     aiMode: row.ai_mode ?? 'mock',
+  };
+}
+
+// ============================================================
+// BI-4（CONTRACT-4）
+// ============================================================
+
+// 【遮断・最重要】顧客向けサンプルビュー。
+// factory_note / request_note を絶対に含めない。呼び出し側で CUSTOMER_REVIEW 以降のみに絞ること
+// （repo の listClientVisibleSamples() を使う）。
+export function toSampleClientView(row: SampleRow): SampleClientView {
+  return {
+    id: row.id,
+    publicId: row.public_id,
+    roundNo: row.round_no,
+    status: row.status,
+    photoDocIds: parseJsonOr<number[]>(row.photo_doc_ids_json, []),
+    customerNote: row.customer_note,
+    decidedAt: row.decided_at,
+    createdAt: row.created_at,
+  };
+}
+
+export function toSampleStaffView(row: SampleRow): SampleStaffView {
+  return {
+    ...toSampleClientView(row),
+    projectId: row.project_id,
+    requestNote: row.request_note,
+    factoryNote: row.factory_note,
+  };
+}
+
+// STAFF専用（CLIENTへは返さない。顧客向けは toProgressSummaryClient() のみ）
+export function toLotView(row: LotRow): LotView {
+  return {
+    id: row.id,
+    publicId: row.public_id,
+    projectId: row.project_id,
+    qty: row.qty,
+    status: row.status,
+    startedAt: row.started_at,
+    expectedDoneOn: row.expected_done_on,
+    doneAt: row.done_at,
+    note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
+export function toInspectionView(row: InspectionRow): InspectionView {
+  return {
+    id: row.id,
+    publicId: row.public_id,
+    projectId: row.project_id,
+    lotId: row.lot_id,
+    result: row.result,
+    inspectedQty: row.inspected_qty,
+    defectQty: row.defect_qty,
+    defectNote: row.defect_note,
+    photoDocIds: parseJsonOr<number[]>(row.photo_doc_ids_json, []),
+    inspectedOn: row.inspected_on,
+    createdAt: row.created_at,
+  };
+}
+
+export function toShipmentView(row: ShipmentRow): ShipmentView {
+  return {
+    id: row.id,
+    publicId: row.public_id,
+    projectId: row.project_id,
+    lotId: row.lot_id,
+    method: row.method,
+    status: row.status,
+    etd: row.etd,
+    eta: row.eta,
+    deliveredOn: row.delivered_on,
+    destinationNote: row.destination_note,
+    trackingNote: row.tracking_note,
+    createdAt: row.created_at,
+  };
+}
+
+const SHIPMENT_METHOD_JA: Record<ShipmentRow['method'], string> = {
+  SEA: '船便',
+  AIR: '航空便',
+  COURIER: '国際宅配便',
+};
+
+// 【遮断・最重要】顧客向け進捗サマリー。
+// 工場名・不良内訳（defect_qty/defect_note）・内部メモ（note/destination_note/tracking_note）を
+// 絶対に含めない。検品は「合格しました（抜取n=◯）」レベルのみ。FAILの存在自体を顧客へ出さない。
+export function toProgressSummaryClient(
+  lots: LotRow[],
+  inspections: InspectionRow[],
+  shipments: ShipmentRow[]
+): ProgressSummaryClient | null {
+  if (lots.length === 0 && shipments.length === 0) return null;
+
+  const latestLot = lots.length > 0 ? lots[lots.length - 1] : null;
+  const production: ProgressSummaryClient['production'] = {
+    status: latestLot ? latestLot.status : 'NONE',
+    expectedDoneOn: latestLot?.expected_done_on ?? null,
+  };
+
+  // 合格実績のみ（不良数・メモは絶対に出さない）
+  const latestPass = [...inspections].reverse().find((i) => i.result === 'PASS');
+  const inspection: ProgressSummaryClient['inspection'] = latestPass
+    ? {
+        passed: true,
+        summaryJa: `検品に合格しました（抜取${latestPass.inspected_qty}個）`,
+      }
+    : null;
+
+  const latestShipment = shipments.length > 0 ? shipments[shipments.length - 1] : null;
+  const shipping: ProgressSummaryClient['shipping'] = latestShipment
+    ? {
+        method: latestShipment.method,
+        status: latestShipment.status,
+        eta: latestShipment.eta,
+        deliveredOn: latestShipment.delivered_on,
+      }
+    : null;
+
+  // 状況カード（顧客向け文言）
+  const cards: string[] = [];
+  if (latestShipment && latestShipment.status !== 'PREPARING') {
+    const methodJa = SHIPMENT_METHOD_JA[latestShipment.method];
+    if (latestShipment.status === 'SHIPPED') {
+      cards.push(
+        latestShipment.eta
+          ? `輸送中です（${methodJa}・到着予定 ${latestShipment.eta}）`
+          : `輸送中です（${methodJa}）`
+      );
+    } else if (latestShipment.status === 'CUSTOMS') {
+      cards.push('通関手続き中です');
+    } else if (latestShipment.status === 'ARRIVED_JP') {
+      cards.push('日本に到着しました。お届けの準備をしています');
+    } else if (latestShipment.status === 'DELIVERED') {
+      cards.push('お届けが完了しました。お受け取りの確認をお願いします');
+    }
+  } else if (latestLot && latestLot.status === 'DONE') {
+    cards.push('生産が完了しました。出荷の準備をしています');
+  } else if (latestLot && latestLot.status === 'IN_PROGRESS') {
+    cards.push(
+      latestLot.expected_done_on
+        ? `生産中です（${latestLot.expected_done_on}ごろ完了予定）`
+        : '生産中です'
+    );
+  } else if (latestLot) {
+    cards.push('生産の準備を進めています');
+  }
+  if (inspection) cards.push(inspection.summaryJa);
+
+  return { production, inspection, shipping, cards };
+}
+
+export function toFeedbackView(feedbackJson: string | null): FeedbackView | null {
+  const parsed = parseJsonOr<{
+    rating?: number;
+    comment?: string | null;
+    askedRepeat?: boolean;
+    submittedAt?: string;
+  } | null>(feedbackJson, null);
+  if (!parsed || typeof parsed.rating !== 'number') return null;
+  return {
+    rating: parsed.rating,
+    comment: parsed.comment ?? null,
+    askedRepeat: parsed.askedRepeat === true,
+    submittedAt: parsed.submittedAt ?? '',
   };
 }

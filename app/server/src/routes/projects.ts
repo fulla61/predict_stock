@@ -32,16 +32,29 @@ import {
   listAgreementsForProject,
 } from '../repo/agreements.js';
 import { listDocumentsForProject } from '../repo/documents.js';
+import { listClientVisibleSamples, listSamplesForProject } from '../repo/samples.js';
+import {
+  listInspectionsForProject,
+  listLotsForProject,
+  listShipmentsForProject,
+} from '../repo/production.js';
 import {
   toAgreementClientView,
   toAgreementStaffView,
   toDocumentStaffView,
+  toFeedbackView,
+  toInspectionView,
   toLoopClientView,
   toLoopStaffView,
+  toLotView,
+  toProgressSummaryClient,
   toProposalView,
   toQuestionView,
   toQuoteView,
   toRfqView,
+  toSampleClientView,
+  toSampleStaffView,
+  toShipmentView,
   toUnderstandingView,
 } from '../views.js';
 import type {
@@ -50,7 +63,8 @@ import type {
   GenerateProposalsResponse,
   LoopClientView,
   ProjectViewClientV3,
-  ProjectViewStaffV3,
+  ProjectViewClientV4,
+  ProjectViewStaffV4,
   SelectResponse,
 } from '../../../shared/api-types.js';
 
@@ -242,7 +256,9 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
     }
     // BI-3: 合意書（顧客が見られるのは PENDING_CUSTOMER / AGREED のみ。DRAFTは非公開）
     const agreement = getLatestVisibleAgreementForClient(projectId);
-    const body: ProjectViewClientV3 = {
+    // BI-4: サンプル（CUSTOMER_REVIEW以降のみ）+ 進捗サマリー（遮断: toProgressSummaryClient経由のみ）
+    const shipments = listShipmentsForProject(projectId);
+    const body: ProjectViewClientV4 = {
       projectId: project.id,
       publicId: project.public_id,
       title: project.title,
@@ -255,6 +271,15 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
       loop: loopPart,
       agreement: agreement ? toAgreementClientView(agreement) : null,
       hideInitialPrices: hidePrices,
+      samples: listClientVisibleSamples(projectId).map(toSampleClientView),
+      progress: toProgressSummaryClient(
+        listLotsForProject(projectId),
+        listInspectionsForProject(projectId),
+        shipments
+      ),
+      deliveryConfirmable:
+        project.status !== 'COMPLETED' && shipments.some((s) => s.status === 'DELIVERED'),
+      feedback: toFeedbackView(project.feedback_json),
     };
     return void res.json(body);
   }
@@ -265,7 +290,7 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
   const requirement = getLatestRequirement(projectId);
   const proposal = getLatestProposal(projectId);
   const dna = getProjectDna(projectId);
-  const body: ProjectViewStaffV3 = {
+  const body: ProjectViewStaffV4 = {
     projectId: project.id,
     publicId: project.public_id,
     title: project.title,
@@ -290,6 +315,12 @@ projectsRouter.get('/projects/:id', requireAuth, (req, res) => {
     agreements: listAgreementsForProject(projectId).map(toAgreementStaffView),
     documents: listDocumentsForProject(projectId).map(toDocumentStaffView),
     hideInitialPrices: project.hide_initial_prices === 1,
+    // BI-4: サンプル往復・生産ロット・検品・輸送・フィードバック（STAFFは内部メモ込み全件）
+    samples: listSamplesForProject(projectId).map(toSampleStaffView),
+    lots: listLotsForProject(projectId).map(toLotView),
+    inspections: listInspectionsForProject(projectId).map(toInspectionView),
+    shipments: listShipmentsForProject(projectId).map(toShipmentView),
+    feedback: toFeedbackView(project.feedback_json),
   };
   res.json(body);
 });

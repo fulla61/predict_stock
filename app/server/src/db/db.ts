@@ -43,6 +43,11 @@ export function migrate(): void {
     db.exec(`ALTER TABLE projects ADD COLUMN hide_initial_prices INTEGER NOT NULL DEFAULT 0`);
   }
 
+  // BI-4: projects へ納品後フィードバック列を追加（非破壊 ALTER。CONTRACT-4 §1）
+  if (!projectCols.some((c) => c.name === 'feedback_json')) {
+    db.exec(`ALTER TABLE projects ADD COLUMN feedback_json TEXT`);
+  }
+
   // BI-2/BI-3: 係数のseed（CONFIGURABLE。既存値は上書きしない）
   const insertSetting = db.prepare(
     `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`

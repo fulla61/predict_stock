@@ -648,3 +648,299 @@ export interface AdminQueueResponseV3 extends AdminQueueResponseV2 {
   /** 顧客のREQUEST_CHANGE着信（DRAFTに戻り customer_note あり・未再送） */
   agreementChangeRequests: AdminAgreementQueueItem[];
 }
+
+// ============================================================
+// BI-4（CONTRACT-4: サンプル〜生産〜検品〜輸送〜納品〜振り返り）
+// ============================================================
+
+// ---- サンプル往復 ----
+export type SampleStatus = 'REQUESTED' | 'ARRIVED' | 'CUSTOMER_REVIEW' | 'APPROVED' | 'REJECTED';
+
+/** 顧客向けサンプルビュー（CUSTOMER_REVIEW以降のみ返る。factory_note/request_noteは存在しない） */
+export interface SampleClientView {
+  id: number;
+  publicId: string; // {ProjectID}-SMP-{NN}
+  roundNo: number;
+  status: SampleStatus;
+  /** 写真（同一案件のdocuments.id。取得は GET /documents/:id/file 経由） */
+  photoDocIds: number[];
+  /** 顧客自身が記入した修正希望（本人とSTAFFのみ） */
+  customerNote: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+}
+/** 社内向けサンプルビュー（内部メモ付き） */
+export interface SampleStaffView extends SampleClientView {
+  projectId: number;
+  requestNote: string | null;
+  factoryNote: string | null;
+}
+// POST /admin/projects/:id/samples
+export interface CreateSampleRequest {
+  requestNote?: string;
+}
+export interface CreateSampleResponse {
+  sample: SampleStaffView;
+}
+// PATCH /admin/samples/:id（APPROVED/REJECTEDは顧客のdecideのみ。STAFFはREQUESTED/ARRIVED/CUSTOMER_REVIEW）
+export interface PatchSampleRequest {
+  status?: 'REQUESTED' | 'ARRIVED' | 'CUSTOMER_REVIEW';
+  factoryNote?: string;
+  photoDocIds?: number[];
+}
+export interface PatchSampleResponse {
+  ok: true;
+  sample: SampleStaffView;
+}
+// POST /samples/:id/decide（CLIENT）
+export interface SampleDecideRequest {
+  decision: 'APPROVE' | 'REQUEST_CHANGE';
+  note?: string;
+}
+export interface SampleDecideResponse {
+  ok: true;
+  status: SampleStatus;
+}
+
+// ---- 生産ロット（G-02ハードゲート） ----
+export type LotStatus = 'PLANNED' | 'IN_PROGRESS' | 'DONE';
+
+/** 社内向けロットビュー（CLIENTへは返さない。顧客はProgressSummaryClientのみ） */
+export interface LotView {
+  id: number;
+  publicId: string; // {ProjectID}-LOT-{NN}
+  projectId: number;
+  qty: number;
+  status: LotStatus;
+  startedAt: string | null;
+  expectedDoneOn: string | null;
+  doneAt: string | null;
+  note: string | null;
+  createdAt: string;
+}
+// POST /admin/projects/:id/lots（合意書AGREEDが無ければ409 {error:{code:'G02_NOT_AGREED'}}）
+export interface CreateLotRequest {
+  qty: number;
+  expectedDoneOn?: string;
+  note?: string;
+}
+export interface CreateLotResponse {
+  lot: LotView;
+}
+// PATCH /admin/lots/:id
+export interface PatchLotRequest {
+  status?: LotStatus;
+  startedAt?: string;
+  doneAt?: string;
+  note?: string;
+}
+export interface PatchLotResponse {
+  ok: true;
+  lot: LotView;
+}
+
+// ---- 検品 ----
+export type InspectionResult = 'PASS' | 'FAIL';
+
+/** 社内向け検品ビュー（CLIENTへは返さない。顧客は「合格しました（抜取n=◯）」レベルのみ） */
+export interface InspectionView {
+  id: number;
+  publicId: string; // {ProjectID}-INS-{NN}
+  projectId: number;
+  lotId: number;
+  result: InspectionResult;
+  inspectedQty: number;
+  defectQty: number;
+  defectNote: string | null;
+  photoDocIds: number[];
+  inspectedOn: string;
+  createdAt: string;
+}
+// POST /admin/lots/:id/inspections
+export interface CreateInspectionRequest {
+  result: InspectionResult;
+  inspectedQty: number;
+  defectQty: number;
+  defectNote?: string;
+  photoDocIds?: number[];
+  inspectedOn: string;
+}
+export interface CreateInspectionResponse {
+  inspection: InspectionView;
+  /** 実測不良率（defectQty/inspectedQty*100・小数2桁） */
+  defectRatePct: number;
+  /** AGREED合意書のtolerance.defectRatePct（未設定ならnull） */
+  toleranceRatePct: number | null;
+  /** 許容率超過（判断は人間。サーバーは自動アクションしない） */
+  overTolerance: boolean;
+  /** PASS時の次工程促し等 */
+  nextActionJa?: string;
+}
+
+// ---- 輸送・輸入 ----
+export type ShipmentMethod = 'SEA' | 'AIR' | 'COURIER';
+export type ShipmentStatus = 'PREPARING' | 'SHIPPED' | 'CUSTOMS' | 'ARRIVED_JP' | 'DELIVERED';
+
+/** 社内向け輸送ビュー（CLIENTへは返さない。顧客はProgressSummaryClientのみ） */
+export interface ShipmentView {
+  id: number;
+  publicId: string; // {ProjectID}-SHP-{NN}
+  projectId: number;
+  lotId: number | null;
+  method: ShipmentMethod;
+  status: ShipmentStatus;
+  etd: string | null;
+  eta: string | null;
+  deliveredOn: string | null;
+  destinationNote: string | null;
+  trackingNote: string | null;
+  createdAt: string;
+}
+// POST /admin/projects/:id/shipments
+export interface CreateShipmentRequest {
+  method: ShipmentMethod;
+  lotId?: number;
+  etd?: string;
+  eta?: string;
+  destinationNote?: string;
+  trackingNote?: string;
+}
+export interface CreateShipmentResponse {
+  shipment: ShipmentView;
+}
+// PATCH /admin/shipments/:id
+export interface PatchShipmentRequest {
+  status?: ShipmentStatus;
+  eta?: string;
+  deliveredOn?: string;
+  trackingNote?: string;
+}
+export interface PatchShipmentResponse {
+  ok: true;
+  shipment: ShipmentView;
+}
+
+// ---- 顧客向け進捗サマリー（サニタイズ済: 工場名・不良内訳・内部メモは存在しない） ----
+export interface ProgressSummaryClient {
+  /** 生産状況（ロットが無ければ 'NONE'） */
+  production: {
+    status: 'NONE' | LotStatus;
+    /** 完了予定日（例: 2026-09-10） */
+    expectedDoneOn: string | null;
+  };
+  /** 検品（合格実績がある場合のみ。「合格しました（抜取n=◯）」レベル） */
+  inspection: {
+    passed: boolean;
+    /** 例: 「検品に合格しました（抜取20個）」 */
+    summaryJa: string;
+  } | null;
+  /** 輸送（最新shipment。追跡メモ・納品先メモは含まない） */
+  shipping: {
+    method: ShipmentMethod;
+    status: ShipmentStatus;
+    eta: string | null;
+    deliveredOn: string | null;
+  } | null;
+  /** 顧客向け状況カード文言（現在地の説明） */
+  cards: string[];
+}
+
+// ---- 納品確認・ひとことフィードバック（P-12最小形） ----
+// POST /projects/:id/delivery-confirm（CLIENT）
+export interface DeliveryConfirmResponse {
+  ok: true;
+  status: string; // COMPLETED
+}
+// POST /projects/:id/feedback（CLIENT）
+export interface FeedbackRequest {
+  rating: number; // 1-5
+  comment?: string;
+  askedRepeat?: boolean;
+}
+export interface FeedbackView {
+  rating: number;
+  comment: string | null;
+  askedRepeat: boolean;
+  submittedAt: string;
+}
+export interface FeedbackResponse {
+  ok: true;
+  feedback: FeedbackView;
+}
+
+// ---- 既存ビューのBI-4拡張 ----
+export interface ProjectViewClientV4 extends ProjectViewClientV3 {
+  /** CUSTOMER_REVIEW以降のサンプルのみ（写真はdocIds。工場メモ等なし） */
+  samples: SampleClientView[];
+  /** 生産〜輸送の顧客向け進捗（内部情報なし）。後工程が始まっていなければ null */
+  progress: ProgressSummaryClient | null;
+  /** 受取確認が可能（shipment DELIVERED済みで未COMPLETED） */
+  deliveryConfirmable: boolean;
+  /** 送信済みフィードバック（未送信なら null） */
+  feedback: FeedbackView | null;
+}
+export interface ProjectViewStaffV4 extends ProjectViewStaffV3 {
+  samples: SampleStaffView[];
+  lots: LotView[];
+  inspections: InspectionView[];
+  shipments: ShipmentView[];
+  feedback: FeedbackView | null;
+}
+
+// ---- 判断キュー拡張（BI-4） ----
+export interface AdminSampleQueueItem {
+  sampleId: number;
+  samplePublicId: string;
+  projectId: number;
+  publicId: string; // project public id
+  clientName: string;
+  title: string;
+  roundNo: number;
+  status: SampleStatus;
+  /** WAITING_CUSTOMER=顧客待ち / CHANGE_REQUESTED=修正希望着信 */
+  kind: 'WAITING_CUSTOMER' | 'CHANGE_REQUESTED';
+  customerNote: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+}
+export interface AdminInspectionFailQueueItem {
+  inspectionId: number;
+  inspectionPublicId: string;
+  lotId: number;
+  lotPublicId: string;
+  projectId: number;
+  publicId: string; // project public id
+  clientName: string;
+  title: string;
+  inspectedQty: number;
+  defectQty: number;
+  defectNote: string | null;
+  inspectedOn: string;
+  createdAt: string;
+}
+export interface AdminDeliveredQueueItem {
+  shipmentId: number;
+  shipmentPublicId: string;
+  projectId: number;
+  publicId: string; // project public id
+  clientName: string;
+  title: string;
+  deliveredOn: string | null;
+}
+export interface AdminFeedbackQueueItem {
+  projectId: number;
+  publicId: string; // project public id
+  clientName: string;
+  title: string;
+  feedback: FeedbackView;
+}
+export interface AdminQueueResponseV4 extends AdminQueueResponseV3 {
+  /** サンプル: 顧客確認待ち + 修正希望着信 */
+  sampleReviews: AdminSampleQueueItem[];
+  /** 検品FAIL着信（同一ロットで再検品が未実施のもの） */
+  inspectionFails: AdminInspectionFailQueueItem[];
+  /** 受取確認待ち（DELIVERED済みで未COMPLETED） */
+  deliveredAwaitingConfirm: AdminDeliveredQueueItem[];
+  /** フィードバック着信（直近14日） */
+  feedbackArrived: AdminFeedbackQueueItem[];
+}

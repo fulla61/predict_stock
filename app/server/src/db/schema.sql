@@ -368,3 +368,76 @@ CREATE TABLE IF NOT EXISTS production_agreements (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_agreements_project ON production_agreements(project_id);
+
+-- ============================================================
+-- BI-4 追加（CONTRACT-4 §1: 4表追加 → 計31表）
+-- projects への feedback_json 列は db.ts の migrate() で ALTER TABLE 追加（非破壊）
+-- ============================================================
+
+-- 28. samples（サンプル往復。public_id: {ProjectID}-SMP-{NN}）
+CREATE TABLE IF NOT EXISTS samples (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  public_id TEXT NOT NULL UNIQUE,             -- {ProjectID}-SMP-{NN}
+  round_no INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'REQUESTED'
+    CHECK (status IN ('REQUESTED','ARRIVED','CUSTOMER_REVIEW','APPROVED','REJECTED')),
+  request_note TEXT,                           -- 依頼メモ（内部用）
+  factory_note TEXT,                           -- 工場側メモ（内部用・CLIENTへ絶対に返さない）
+  photo_doc_ids_json TEXT NOT NULL DEFAULT '[]', -- 同一案件のdocuments.idのみ
+  customer_note TEXT,                          -- 顧客の修正希望（本人とSTAFFのみ）
+  decided_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_samples_project ON samples(project_id);
+
+-- 29. production_lots（生産ロット。G-02ハードゲート: 合意書AGREEDが無い案件では作成不可）
+CREATE TABLE IF NOT EXISTS production_lots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  public_id TEXT NOT NULL UNIQUE,             -- {ProjectID}-LOT-{NN}
+  qty INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PLANNED'
+    CHECK (status IN ('PLANNED','IN_PROGRESS','DONE')),
+  started_at TEXT,
+  expected_done_on TEXT,
+  done_at TEXT,
+  note TEXT,                                   -- 内部メモ（CLIENTへ返さない）
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_lots_project ON production_lots(project_id);
+
+-- 30. inspections（検品。FAILは記録+メモ+新しい検品行で表現。自動アクションしない）
+CREATE TABLE IF NOT EXISTS inspections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  lot_id INTEGER NOT NULL REFERENCES production_lots(id),
+  public_id TEXT NOT NULL UNIQUE,             -- {ProjectID}-INS-{NN}
+  result TEXT NOT NULL CHECK (result IN ('PASS','FAIL')),
+  inspected_qty INTEGER NOT NULL,
+  defect_qty INTEGER NOT NULL DEFAULT 0,
+  defect_note TEXT,                            -- 不良内容メモ（内部用・CLIENTへ返さない）
+  photo_doc_ids_json TEXT NOT NULL DEFAULT '[]',
+  inspected_on TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_inspections_project ON inspections(project_id);
+CREATE INDEX IF NOT EXISTS idx_inspections_lot ON inspections(lot_id);
+
+-- 31. shipments（輸送・輸入）
+CREATE TABLE IF NOT EXISTS shipments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  public_id TEXT NOT NULL UNIQUE,             -- {ProjectID}-SHP-{NN}
+  lot_id INTEGER REFERENCES production_lots(id),
+  method TEXT NOT NULL CHECK (method IN ('SEA','AIR','COURIER')),
+  status TEXT NOT NULL DEFAULT 'PREPARING'
+    CHECK (status IN ('PREPARING','SHIPPED','CUSTOMS','ARRIVED_JP','DELIVERED')),
+  etd TEXT,                                    -- 出発予定
+  eta TEXT,                                    -- 到着予定
+  delivered_on TEXT,
+  destination_note TEXT,                       -- 納品先メモ（内部用）
+  tracking_note TEXT,                          -- 追跡メモ（内部用）
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_shipments_project ON shipments(project_id);

@@ -232,3 +232,64 @@ timeline: `DOC_UPLOADED / NOTE / AGREEMENT_DRAFTED / AGREEMENT_SENT / AGREEMENT_
 | 16 | `npm run check`（tsc --noEmit）エラーゼロ | OK |
 
 ファイル実体は `data/uploads/{projectId}/{docId}_{ファイル名}` に保存されることを確認（本番はDATA_DIR配下）。
+
+---
+
+# Build Increment 4（CONTRACT-4）追記 — サンプル〜生産〜検品〜輸送〜納品〜振り返り
+
+## DB追加（4表追加 → 計31表 + 非破壊ALTER）
+
+- 新表 `samples`（`{ProjectID}-SMP-{NN}`・round_no・status `REQUESTED/ARRIVED/CUSTOMER_REVIEW/APPROVED/REJECTED`・request_note/factory_note（内部用）・photo_doc_ids_json・customer_note・decided_at）
+- 新表 `production_lots`（`{ProjectID}-LOT-{NN}`・qty・status `PLANNED/IN_PROGRESS/DONE`・started_at/expected_done_on/done_at・note）
+- 新表 `inspections`（`{ProjectID}-INS-{NN}`・lot_id FK・result `PASS/FAIL`・inspected_qty/defect_qty/defect_note・photo_doc_ids_json・inspected_on。追記型: FAIL後の再検品は新しい行）
+- 新表 `shipments`（`{ProjectID}-SHP-{NN}`・lot_id FK NULL可・method `SEA/AIR/COURIER`・status `PREPARING/SHIPPED/CUSTOMS/ARRIVED_JP/DELIVERED`・etd/eta/delivered_on・destination_note/tracking_note）
+- `projects` へ ALTER 追加: `feedback_json TEXT`（{rating, comment, askedRepeat, submittedAt}。新表は作らない）
+- 採番ヘルパ追加: `nextSamplePublicId / nextLotPublicId / nextInspectionPublicId / nextShipmentPublicId`（既存の {Proj}-XXX-{NN} 方式）
+- `projects.state` の拡張値: `SAMPLE → PRODUCTION → INSPECTION → SHIPPING → DELIVERED → COMPLETED`。`advanceProjectState()` で**前進のみ**（自動での後戻りなし）
+
+## API追加（11項目 + キュー拡張。★=STAFF / ☆=CLIENT）
+
+| # | エンドポイント | 内容 |
+|---|---|---|
+| 1★ | `POST /admin/projects/:id/samples` | {requestNote?}。SMP採番・REQUESTED・state=SAMPLE。次ラウンドも同APIで作成（round_no自動+1） |
+| 2★ | `PATCH /admin/samples/:id` | {status?, factoryNote?, photoDocIds?}。statusは`REQUESTED/ARRIVED/CUSTOMER_REVIEW`のみ（APPROVED/REJECTEDは顧客decide専用）。photoDocIdsは**同一案件のdocのみ**（越境は400）。写真ゼロでのCUSTOMER_REVIEWは409 |
+| 3★ | `POST /admin/projects/:id/lots` | **G-02ハードゲート**: 合意書AGREEDが無ければ `409 {error:{code:'G02_NOT_AGREED', message:'量産合意書がまだ合意されていません。合意後に生産を開始できます。'}}`。作成でstate=PRODUCTION |
+| 4★ | `PATCH /admin/lots/:id` | {status?, startedAt?, doneAt?, note?}。IN_PROGRESS/DONEで開始・完了時刻を自動記録（明示指定優先） |
+| 5★ | `POST /admin/lots/:id/inspections` | INS採番・state=INSPECTION。AGREED合意書の `tolerance.defectRatePct` と突合し `{defectRatePct, toleranceRatePct, overTolerance}` を返す（**判断は人間・自動アクションなし**）。PASS時は `nextActionJa` で次工程促し |
+| 6★ | `POST /admin/projects/:id/shipments` | {method, lotId?, etd?, eta?, ...}。SHP採番・state=SHIPPING。lotIdは同一案件のみ |
+| 7★ | `PATCH /admin/shipments/:id` | {status?, eta?, deliveredOn?, trackingNote?}。DELIVEREDでstate=DELIVERED（顧客に受取確認が出る）・delivered_on自動記録 |
+| 8☆ | `GET /projects/:id`（拡張） | `samples`（**CUSTOMER_REVIEW以降のみ**・写真docId）/ `progress`（顧客向け進捗サマリー+状況カード文言）/ `deliveryConfirmable` / `feedback` を同梱 |
+| 9☆ | `POST /samples/:id/decide` | APPROVE→APPROVED+decided_at / REQUEST_CHANGE→REJECTED+customer_note（必須）→社内キュー着信。回答済みは409 |
+| 10☆ | `POST /projects/:id/delivery-confirm` | DELIVERED済みshipmentが無ければ409。state=COMPLETED・timeline DELIVERY_CONFIRMED |
+| 11☆ | `POST /projects/:id/feedback` | {rating(1-5・zod), comment?, askedRepeat?}。`projects.feedback_json`保存・timeline FEEDBACK・キュー着信。0/6は400・二重送信409 |
+
+- `GET /admin/queue` を拡張（既存キーは不変・全キー配列で防御的）: `sampleReviews`（CUSTOMER_REVIEW=顧客待ち + REJECTEDで次ラウンド未作成=修正希望着信。`kind`で区別）/ `inspectionFails`（FAILで同一ロットの再検品未実施）/ `deliveredAwaitingConfirm`（DELIVEREDだが未COMPLETED）/ `feedbackArrived`（直近14日）
+
+## 遮断（BI-4分）
+
+- 顧客向けサンプルは `toSampleClientView()` 経由のみ: **factory_note / request_note を含めない**。CUSTOMER_REVIEW前のサンプルは存在しない扱い
+- 顧客向け進捗は `toProgressSummaryClient()` 経由のみ: **工場名・defect_qty/defect_note・lot note・destination_note/tracking_note を含めない**。検品は「検品に合格しました（抜取n=◯）」のみで、**FAILの存在自体を顧客に出さない**
+- lots/inspections/shipments の生配列はSTAFFビュー専用（顧客JSONにキー自体が無い）
+- 他社CLIENTからの `samples/:id/decide` / `delivery-confirm` / `feedback` はすべて404（テナント分離）
+
+## audit / timeline 追加
+
+audit: `sample_create / sample_update / sample_decide / lot_create / lot_update / inspection_add / shipment_create / shipment_update / delivery_confirm / feedback_submit`
+timeline: `SAMPLE_REQUESTED / SAMPLE_ARRIVED / SAMPLE_CUSTOMER_REVIEW / SAMPLE_APPROVED / SAMPLE_CHANGE_REQUESTED / LOT_CREATED / LOT_STARTED / LOT_DONE / INSPECTION_PASS / INSPECTION_FAIL / SHIPMENT_CREATED / SHIPMENT_SHIPPED / SHIPMENT_CUSTOMS / SHIPMENT_ARRIVED_JP / SHIPMENT_DELIVERED / DELIVERY_CONFIRMED / FEEDBACK`
+
+## 検証結果（2026-08-17 実施・DB初期化→実起動+curl。mockフォールバック経路）
+
+| # | 確認項目 | 結果 |
+|---|---|---|
+| 1 | サンプル依頼（SMP採番・state=SAMPLE）→写真アップロード→ARRIVED+紐付け→CUSTOMER_REVIEWで顧客に表示（写真取得200）。REQUESTED中は顧客から見えない | OK |
+| 2 | CLIENT「修正を希望」→REJECTED+queueに`CHANGE_REQUESTED`（要望文付き）→2ラウンド目（round_no=2）作成でキュー消化→CLIENT承認→APPROVED。回答済みへの再decideは409 | OK |
+| 3 | **G-02**: 合意書AGREED前のロット開始→409 `G02_NOT_AGREED`（メッセージ完全一致）。AGREED後→LOT採番・state=PRODUCTION | OK |
+| 4 | 検品FAIL（2/20=10% > 許容1%）→ `overTolerance:true, toleranceRatePct:1, defectRatePct:10`・queueの`inspectionFails`着信・**自動アクションなし**→再検品PASSでキュー消化・`nextActionJa`付き | OK |
+| 5 | 輸送SHIPPED→CUSTOMS→DELIVERED。顧客の状況カードが「生産中（…完了予定）」「検品に合格しました（抜取20個）」「輸送中（船便・到着予定…）」「通関手続き中」→受取確認依頼へ変化 | OK |
+| 6 | CLIENT「受け取りました」→COMPLETED→フィードバック（★5+コメント+リピート希望）→`feedback_json`保存・timeline FEEDBACK・queueの`feedbackArrived`着信。rating 0/6は400・二重送信409 | OK |
+| 7 | 遮断: 顧客JSONに factoryNote/requestNote/defectNote/trackingNote/destinationNote/工場名/内部メモ本文が一切出ない（完全一致grepで0件）。検品FAILは顧客側に痕跡なし | OK |
+| 8 | テナント: 他社CLIENTのsample decide/delivery-confirm/feedback/案件閲覧すべて404。CLIENT→/admin/*は403 | OK |
+| 9 | state前進のみ: COMPLETED後のサンプル追加・shipment状態編集でstateが後戻りしない | OK |
+| 10 | timeline 16種・audit 10種の追記をDBで確認 | OK |
+| 11 | 回帰: BI-1（相談→回答→提案→承認→選択）/ BI-2（RFQ→送信→見積→Loop→承認→顧客表示→ACCEPT）/ BI-3（合意書 作成→送信→顧客APPROVE→AGREED）すべて動作。/admin/queue は9キー全て配列（既存キー不変） | OK |
+| 12 | `npm run check`（tsc --noEmit）エラーゼロ | OK |
