@@ -69,9 +69,38 @@ function runInboxSweep() {
   try {
     classifyInbox();
     fileSentInvoices();
+    draftReplies();
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * 返信下書きのドライラン ── 各スレッドの判定だけを出し、下書きは作らない。
+ * 「どのメールに返信が要ると判断したか」を先に目視するために使う。
+ */
+function dryRunReplies() {
+  var threads = GmailApp.search('in:inbox -from:me newer_than:30d', 0, 50);
+  var out = ['返信判定ドライラン ' + ymd(today()), ''];
+
+  threads.forEach(function (thread) {
+    var last = lastInboundMessage(thread);
+    if (!last) return;
+    var client = resolveClientFromThread(thread);
+    var type = classifyReply(thread, last, client);
+    var already = repliedAfter(thread, last) ? '返信済' :
+                  hasDraftInThread(thread.getId()) ? '下書きあり' : '未対応';
+    out.push([
+      already,
+      type,
+      (client ? client.code : '—'),
+      (thread.getFirstMessageSubject() || '').slice(0, 40)
+    ].join(' | '));
+  });
+
+  var report = out.join('\n');
+  console.log(report);
+  return report;
 }
 
 /** 疎通確認。破壊的な操作は一切行わない。 */
