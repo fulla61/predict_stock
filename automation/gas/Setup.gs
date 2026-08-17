@@ -67,9 +67,10 @@ function runInboxSweep() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) { console.warn('別の実行が進行中のためスキップ'); return; }
   try {
-    classifyInbox();
-    fileSentInvoices();
-    draftReplies();
+    classifyInbox();        // 分類・S1（案件フォルダ作成＋発注書保存＋台帳起票）
+    issuePendingInvoices(); // 台帳に金額が入った案件の請求書を生成し下書きに添付
+    fileSentInvoices();     // S2（送付済み請求書の保存）
+    draftReplies();         // 定常メールへの返信下書き
   } finally {
     lock.releaseLock();
   }
