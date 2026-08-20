@@ -1,17 +1,23 @@
-# Render Blueprint — リポジトリを選ぶだけで本番環境が自動構築される定義ファイル
+# Render Blueprint — リポジトリを選ぶだけで公開環境が自動構築される定義ファイル
 # 手順は DEPLOY.md を参照
+#
+# 現在は【デモ公開モード＝無料プラン・カード登録不要】。
+#   - 上司・お客様に実際に操作してもらう用途に十分
+#   - 制約: 15分アクセスが無いとスリープし、次のアクセス時の初回表示に約1分かかる。
+#           再起動・再デプロイでデータが初期状態に戻る（永続ディスクなし）
+# 本運用へ切り替える時: plan を starter にし、下の disk: コメントを外す（約$7/月・データ永続化）。
 services:
   - type: web
     name: crossimage-product-os
     runtime: docker
-    plan: starter # 永続ディスク（SQLite保存）に有料プランが必要。約$7/月
+    plan: free # 本運用時: starter へ変更
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
-    autoDeploy: true # main へのプッシュで自動再デプロイ
-    disk:
-      name: crossimage-data
-      mountPath: /data
-      sizeGB: 1
+    autoDeploy: true # ブランチへのプッシュで自動再デプロイ
+    # disk:                      # ← 本運用時にコメント解除（無料プランでは使えません）
+    #   name: crossimage-data
+    #   mountPath: /data
+    #   sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
@@ -22,7 +28,7 @@ services:
       - key: SESSION_SECRET
         generateValue: true # Render が安全な乱数を自動生成
       - key: SEED_STAFF_PW
-        generateValue: true # 初期の社内ログインパスワード（Render管理画面のEnvironmentで確認）
+        generateValue: true # 社内ログインパスワード（Render管理画面のEnvironmentで確認）
       - key: SEED_CLIENT_PW
         generateValue: true # デモ顧客のパスワード（同上）
       - key: ANTHROPIC_API_KEY
