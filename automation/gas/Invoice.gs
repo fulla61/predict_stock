@@ -5,8 +5,8 @@
  * 返信下書きに添付するところまでを自動化する。
  *
  * 生成物:
- *   {案件フォルダ}/{YYYYMMDD}_{発注書No}_請求書_{区分}          … Google Sheet（編集原本）
- *   {案件フォルダ}/{YYYYMMDD}_{発注書No}_請求書_{区分}.pdf      … 送付版
+ *   {案件フォルダ}/{YYYYMMDD}_{請求書番号}_{区分}請求書_{案件名}       … Google Sheet（編集原本）
+ *   {案件フォルダ}/{YYYYMMDD}_{請求書番号}_{区分}請求書_{案件名}.pdf   … 送付版
  *
  * 【重要】金額は機械が決められない。
  *   発注書の合計金額を人が台帳の「税込」に入れるまで、請求書は生成しない。
@@ -61,7 +61,9 @@ function generateInvoice(row) {
   var folder = DriveApp.getFolderById(folderId);
 
   var issueDate = row.issueDate || today();
-  var baseName = [ymdCompact(issueDate), row.poNo, '請求書', row.kind].join('_');
+  // 統一命名（2026-08-24 確定）: {YYYYMMDD}_{請求書番号}_{区分}請求書_{案件名}
+  var doc = (row.kind === '前金' || row.kind === '残金') ? row.kind + '請求書' : '請求書';
+  var baseName = [ymdCompact(issueDate), row.invoiceNo, doc, safeName(row.project)].join('_');
 
   if (fileExists(folder, baseName + '.pdf')) {
     console.log('生成済みのためスキップ: ' + baseName);

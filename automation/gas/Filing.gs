@@ -2,7 +2,8 @@
  * Drive 保存 ── S1〜S4（ルール §5.4）
  *
  * 保存先: 10_クライアント / 会社 / 年 / YYMMDD【発注書No】案件名
- * 命名:   {YYYYMMDD}_{発注書No}_{書類種別}_{区分}.{拡張子}
+ * 命名:   請求書 {YYYYMMDD}_{請求書番号}_{区分}請求書_{案件名}.{拡張子}
+ *         発注書 {YYYYMMDD}_{発注書No}_発注書_{案件名}.{拡張子}
  *
  * これがメール処理の完了条件。案件フォルダが無い状態で請求書は送らない。
  */
@@ -48,14 +49,22 @@ function fileExists(folder, name) {
 }
 
 /**
- * 添付を規定の名前で保存する。
+ * 添付を統一命名で保存する。
  * 既に同名があればスキップし、"(1)" 付きファイルを作らない（既存ルール4）。
+ *
+ * 命名（2026-08-24 確定・エクシア案件フォルダの実例を正とする）:
+ *   請求書: {YYYYMMDD}_{請求書番号}_{区分}請求書_{案件名}.{ext}
+ *           例) 20260821_CRS-CRI-002_2_残金請求書_ホワイトニング機材.pdf
+ *           （全額請求は区分を付けず「請求書」のみ）
+ *   発注書: {YYYYMMDD}_{発注書No}_発注書_{案件名}.{ext}
+ *           例) 20260609_CRI-002_発注書_ホワイトニング機材.pdf
  */
-function saveAttachment(folder, attachment, dateStr, poNo, docType, kind) {
+function saveAttachment(folder, attachment, dateStr, refNo, docType, kind, project) {
   var orig = attachment.getName();
   var ext = (orig.match(/\.([A-Za-z0-9]+)$/) || [null, 'pdf'])[1];
-  var parts = [dateStr, poNo, docType];
-  if (kind) parts.push(kind);
+  var doc = (kind ? kind : '') + docType;   // 前金 + 請求書 → 前金請求書
+  var parts = [dateStr, refNo, doc];
+  if (project) parts.push(safeName(project));
   var name = parts.join('_') + '.' + ext.toLowerCase();
 
   if (fileExists(folder, name)) return null;
@@ -80,7 +89,7 @@ function fileIncomingPurchaseOrder(thread, message, client) {
   var folder = caseFolder(client, poNo, received, project);
 
   atts.forEach(function (a) {
-    saveAttachment(folder, a, ymdCompact(received), poNo, '発注書', null);
+    saveAttachment(folder, a, ymdCompact(received), poNo, '発注書', null, project);
   });
 
   // 台帳に未送付で起票（請求書番号は §3 の書式で採番）
@@ -133,25 +142,28 @@ function fileSentInvoices() {
                    extractPoNumber(atts[0].getName()) ||
                    yymmdd(m.getDate());
         var kind = extractKind(msgSubject) || extractKind(atts[0].getName()) || '全額';
-        var folder = caseFolder(client, poNo, m.getDate(), extractProjectName(msgSubject));
+        var project = extractProjectName(msgSubject);
+        var folder = caseFolder(client, poNo, m.getDate(), project);
+        var invoiceNo = ['CRS', client.code, poNo,
+                         kind === '前金' ? '1' : kind === '残金' ? '2' : '0'].join('-');
 
         atts.forEach(function (a) {
           // 相手から来た発注書を参考添付し直したものは原本名のまま別保存しない
           var docType = /見積/.test(a.getName()) ? '見積書'
                       : /発注/.test(a.getName()) ? '発注書'
                       : '請求書';
-          var k = (docType === '請求書') ? kind : null;
-          if (saveAttachment(folder, a, ymdCompact(m.getDate()), poNo, docType, k)) saved++;
+          var isInvoice = (docType === '請求書');
+          if (saveAttachment(folder, a, ymdCompact(m.getDate()),
+                             isInvoice ? invoiceNo : poNo, docType,
+                             (isInvoice && kind !== '全額') ? kind : null, project)) saved++;
         });
 
         // 台帳へ Drive リンクとステータスを反映
-        var invoiceNo = ['CRS', client.code, poNo,
-                         kind === '前金' ? '1' : kind === '残金' ? '2' : '0'].join('-');
         upsertLedgerRow({
           invoiceNo: invoiceNo,
           clientCode: client.code,
           clientName: client.name,
-          project: extractProjectName(msgSubject),
+          project: project,
           poNo: poNo,
           kind: kind,
           issueDate: ymd(m.getDate()),
