@@ -2,8 +2,8 @@
  * Drive 保存 ── S1〜S4（ルール §5.4）
  *
  * 保存先: 10_クライアント / 会社 / 年 / YYMMDD【発注書No】案件名
- * 命名:   請求書 {YYYYMMDD}_{請求書番号}_{区分}請求書_{案件名}.{拡張子}
- *         発注書 {YYYYMMDD}_{発注書No}_発注書_{案件名}.{拡張子}
+ * 命名:   {YYYYMMDD}_{発注書No}_{書類種別}_{案件名}.{拡張子}
+ *         書類種別 = 発注書 / 前金請求書 / 残金請求書 / 請求書（全額）
  *
  * これがメール処理の完了条件。案件フォルダが無い状態で請求書は送らない。
  */
@@ -52,12 +52,12 @@ function fileExists(folder, name) {
  * 添付を統一命名で保存する。
  * 既に同名があればスキップし、"(1)" 付きファイルを作らない（既存ルール4）。
  *
- * 命名（2026-08-24 確定・エクシア案件フォルダの実例を正とする）:
- *   請求書: {YYYYMMDD}_{請求書番号}_{区分}請求書_{案件名}.{ext}
- *           例) 20260821_CRS-CRI-002_2_残金請求書_ホワイトニング機材.pdf
- *           （全額請求は区分を付けず「請求書」のみ）
- *   発注書: {YYYYMMDD}_{発注書No}_発注書_{案件名}.{ext}
- *           例) 20260609_CRI-002_発注書_ホワイトニング機材.pdf
+ * 命名（2026-08-24 確定・経理担当の実操作を正とする。番号は発注書Noで統一）:
+ *   {YYYYMMDD}_{発注書No}_{書類種別}_{案件名}.{ext}
+ *   例) 20260609_CRI-002_発注書_ホワイトニング機材.pdf
+ *       20260609_CRI-002_前金請求書_ホワイトニング機材.pdf
+ *       20260821_CRI-002_残金請求書_ホワイトニング機材.pdf
+ *   （全額請求は区分を付けず「請求書」のみ）
  */
 function saveAttachment(folder, attachment, dateStr, refNo, docType, kind, project) {
   var orig = attachment.getName();
@@ -153,8 +153,7 @@ function fileSentInvoices() {
                       : /発注/.test(a.getName()) ? '発注書'
                       : '請求書';
           var isInvoice = (docType === '請求書');
-          if (saveAttachment(folder, a, ymdCompact(m.getDate()),
-                             isInvoice ? invoiceNo : poNo, docType,
+          if (saveAttachment(folder, a, ymdCompact(m.getDate()), poNo, docType,
                              (isInvoice && kind !== '全額') ? kind : null, project)) saved++;
         });
 
